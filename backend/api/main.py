@@ -74,9 +74,22 @@ app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
 
 
 @app.get("/health")
-async def health_check() -> Dict[str, str]:
-    """Health check endpoint."""
-    return {"status": "healthy"}
+async def health_check() -> Dict[str, Any]:
+    """Health check endpoint with version info.
+
+    Returns:
+        Health status including API version and available features.
+    """
+    return {
+        "status": "healthy",
+        "version": app.version,
+        "title": app.title,
+        "features": {
+            "mcmc_sampling": True,
+            "diffusion_sampling": True,
+            "websocket_streaming": True,
+        },
+    }
 
 
 @app.get("/config")
