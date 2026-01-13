@@ -279,3 +279,50 @@ class TestTrainerBasic:
             loss_weighting="sigma",
         )
         assert trainer.loss_weighting == "sigma"
+
+
+class TestTrainerCheckpointing:
+    """Tests for Trainer checkpoint save/load."""
+
+    def test_save_checkpoint(self, trainer, sample_dataloader):
+        """Trainer can save checkpoint."""
+        # Train a bit first
+        trainer.train_epoch(sample_dataloader)
+
+        with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
+            trainer.save_checkpoint(f.name)
+            assert os.path.exists(f.name)
+            os.unlink(f.name)
+
+    def test_load_checkpoint(self, small_score_network, diffusion, sample_dataloader):
+        """Trainer can load checkpoint."""
+        # Create and train first trainer
+        trainer1 = Trainer(small_score_network, diffusion)
+        trainer1.train(sample_dataloader, epochs=2, verbose=False)
+
+        # Save checkpoint
+        with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
+            trainer1.save_checkpoint(f.name)
+
+            # Create new trainer and load
+            new_network = ScoreNetwork(
+                in_channels=1, base_channels=8, time_embed_dim=16, num_blocks=1
+            )
+            trainer2 = Trainer(new_network, diffusion)
+            trainer2.load_checkpoint(f.name)
+
+            # History should be loaded
+            assert len(trainer2.history["train_loss"]) == 2
+            os.unlink(f.name)
+
+    def test_checkpoint_contains_history(self, trainer, sample_dataloader):
+        """Checkpoint contains training history."""
+        trainer.train(sample_dataloader, epochs=3, verbose=False)
+
+        with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
+            trainer.save_checkpoint(f.name)
+            checkpoint = torch.load(f.name)
+            assert "history" in checkpoint
+            assert "train_loss" in checkpoint["history"]
+            assert len(checkpoint["history"]["train_loss"]) == 3
+            os.unlink(f.name)
