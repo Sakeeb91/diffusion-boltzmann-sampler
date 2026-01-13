@@ -106,11 +106,13 @@ class EarlyStopping:
 
         if self.best_score is None:
             self.best_score = current
-        elif current < self.best_score + self.min_delta:
+        elif current <= self.best_score + self.min_delta:
+            # No improvement (same or worse than best + delta)
             self.counter += 1
             if self.counter >= self.patience:
                 self.should_stop = True
         else:
+            # Improvement - update best and reset counter
             self.best_score = current
             self.counter = 0
 
