@@ -155,6 +155,8 @@ class Trainer:
         self.history: Dict[str, List[float]] = {
             "train_loss": [],
             "val_loss": [],
+            "grad_norm": [],
+            "learning_rate": [],
         }
 
     def score_matching_loss(self, x_0: torch.Tensor) -> torch.Tensor:
