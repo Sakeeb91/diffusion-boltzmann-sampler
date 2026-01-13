@@ -191,3 +191,55 @@ class TestRandomEndpoint:
         for row in data["spins"]:
             for spin in row:
                 assert spin in [-1, 1], f"Invalid spin value: {spin}"
+
+
+class TestGroundStateEndpoint:
+    """Tests for /sample/ground_state endpoint."""
+
+    def test_ground_state_endpoint_returns_200(self, client: TestClient):
+        """Ground state endpoint should return 200 OK."""
+        response = client.get("/sample/ground_state")
+        assert response.status_code == 200
+
+    def test_ground_state_positive_default(self, client: TestClient):
+        """Ground state should default to all +1 spins."""
+        response = client.get("/sample/ground_state?lattice_size=8")
+        data = response.json()
+        for row in data["spins"]:
+            for spin in row:
+                assert spin == 1, "Default ground state should be all +1"
+
+    def test_ground_state_negative(self, client: TestClient):
+        """Ground state with positive=false should be all -1."""
+        response = client.get("/sample/ground_state?lattice_size=8&positive=false")
+        data = response.json()
+        for row in data["spins"]:
+            for spin in row:
+                assert spin == -1, "Negative ground state should be all -1"
+
+    def test_ground_state_has_minimum_energy(self, client: TestClient):
+        """Ground state should have minimum energy."""
+        response = client.get("/sample/ground_state?lattice_size=8")
+        data = response.json()
+        # Energy per spin for ground state: -2J = -2 (with J=1)
+        assert data["energy"] == -2.0
+
+    def test_ground_state_has_maximum_magnetization(self, client: TestClient):
+        """Positive ground state should have magnetization = +1."""
+        response = client.get("/sample/ground_state?lattice_size=8&positive=true")
+        data = response.json()
+        assert data["magnetization"] == 1.0
+
+    def test_ground_state_negative_magnetization(self, client: TestClient):
+        """Negative ground state should have magnetization = -1."""
+        response = client.get("/sample/ground_state?lattice_size=8&positive=false")
+        data = response.json()
+        assert data["magnetization"] == -1.0
+
+    def test_ground_state_custom_size(self, client: TestClient):
+        """Ground state should respect custom lattice_size."""
+        response = client.get("/sample/ground_state?lattice_size=16")
+        data = response.json()
+        assert data["lattice_size"] == 16
+        assert len(data["spins"]) == 16
+        assert all(len(row) == 16 for row in data["spins"])
