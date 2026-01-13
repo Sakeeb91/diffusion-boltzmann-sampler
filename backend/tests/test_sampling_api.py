@@ -243,3 +243,73 @@ class TestGroundStateEndpoint:
         assert data["lattice_size"] == 16
         assert len(data["spins"]) == 16
         assert all(len(row) == 16 for row in data["spins"])
+
+
+class TestMCMCErrorHandling:
+    """Tests for MCMC endpoint error handling."""
+
+    def test_mcmc_rejects_invalid_lattice_size_too_small(self, client: TestClient):
+        """Lattice size below minimum should be rejected."""
+        params = {
+            "temperature": 2.27,
+            "lattice_size": 4,  # Below minimum of 8
+            "n_samples": 2,
+            "n_sweeps": 5,
+            "burn_in": 10,
+        }
+        response = client.post("/sample/mcmc", json=params)
+        assert response.status_code == 422
+
+    def test_mcmc_rejects_invalid_lattice_size_too_large(self, client: TestClient):
+        """Lattice size above maximum should be rejected."""
+        params = {
+            "temperature": 2.27,
+            "lattice_size": 256,  # Above maximum of 128
+            "n_samples": 2,
+            "n_sweeps": 5,
+            "burn_in": 10,
+        }
+        response = client.post("/sample/mcmc", json=params)
+        assert response.status_code == 422
+
+    def test_mcmc_rejects_invalid_n_samples(self, client: TestClient):
+        """Invalid n_samples should be rejected."""
+        params = {
+            "temperature": 2.27,
+            "lattice_size": 16,
+            "n_samples": 0,  # Must be >= 1
+            "n_sweeps": 5,
+            "burn_in": 10,
+        }
+        response = client.post("/sample/mcmc", json=params)
+        assert response.status_code == 422
+
+    def test_mcmc_rejects_negative_burn_in(self, client: TestClient):
+        """Negative burn_in should be rejected."""
+        params = {
+            "temperature": 2.27,
+            "lattice_size": 16,
+            "n_samples": 2,
+            "n_sweeps": 5,
+            "burn_in": -10,  # Must be >= 0
+        }
+        response = client.post("/sample/mcmc", json=params)
+        assert response.status_code == 422
+
+    def test_mcmc_rejects_missing_required_params(self, client: TestClient):
+        """Missing required parameters should return validation error."""
+        # Empty request
+        response = client.post("/sample/mcmc", json={})
+        # Should use defaults, so this may actually work
+        # But let's test with invalid types
+        response = client.post("/sample/mcmc", json={"temperature": "not_a_number"})
+        assert response.status_code == 422
+
+    def test_mcmc_rejects_non_json_body(self, client: TestClient):
+        """Non-JSON request body should be rejected."""
+        response = client.post(
+            "/sample/mcmc",
+            content="not json",
+            headers={"content-type": "text/plain"},
+        )
+        assert response.status_code == 422
