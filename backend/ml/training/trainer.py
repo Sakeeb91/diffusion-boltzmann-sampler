@@ -3,8 +3,9 @@
 import torch
 import torch.nn as nn
 from torch.optim import Adam
+from torch.optim.lr_scheduler import _LRScheduler, CosineAnnealingLR, StepLR
 from torch.utils.data import DataLoader, TensorDataset
-from typing import Optional, Callable, Dict, List, Union
+from typing import Optional, Callable, Dict, List, Union, Literal
 from tqdm import tqdm
 
 from ..models.score_network import ScoreNetwork
@@ -12,6 +13,38 @@ from ..models.diffusion import DiffusionProcess
 from ..systems.ising import IsingModel
 from ..samplers.mcmc import MetropolisHastings
 from .losses import ScoreMatchingLoss, WeightingType
+
+# Type alias for scheduler types
+SchedulerType = Literal["none", "cosine", "step"]
+
+
+def create_scheduler(
+    optimizer: Adam,
+    scheduler_type: SchedulerType,
+    epochs: int,
+    step_size: int = 10,
+    gamma: float = 0.5,
+) -> Optional[_LRScheduler]:
+    """Create learning rate scheduler.
+
+    Args:
+        optimizer: Optimizer to schedule
+        scheduler_type: Type of scheduler ("none", "cosine", "step")
+        epochs: Total training epochs (for cosine)
+        step_size: Step size for StepLR (default: 10)
+        gamma: Decay factor for StepLR (default: 0.5)
+
+    Returns:
+        Scheduler instance or None if scheduler_type is "none"
+    """
+    if scheduler_type == "none":
+        return None
+    elif scheduler_type == "cosine":
+        return CosineAnnealingLR(optimizer, T_max=epochs)
+    elif scheduler_type == "step":
+        return StepLR(optimizer, step_size=step_size, gamma=gamma)
+    else:
+        raise ValueError(f"Unknown scheduler type: {scheduler_type}")
 
 
 class EMA:
