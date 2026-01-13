@@ -282,3 +282,57 @@ class TestScoreNetworkGradients:
 
         # Loss should decrease (usually)
         assert loss2 < loss1 * 1.5  # Allow some variance
+
+
+# ============================================================================
+# DiffusionProcess Forward Tests
+# ============================================================================
+
+
+class TestDiffusionProcessForward:
+    """Tests for diffusion forward process."""
+
+    def test_forward_output_shapes(self, diffusion, batch_data):
+        """Forward process returns correct shapes."""
+        x, t = batch_data
+        x_t, noise = diffusion.forward(x, t)
+        assert x_t.shape == x.shape
+        assert noise.shape == x.shape
+
+    def test_forward_at_t_zero(self, diffusion):
+        """At t=0, x_t should be close to x_0."""
+        x_0 = torch.randn(4, 1, 16, 16)
+        t = torch.zeros(4)
+        x_t, _ = diffusion.forward(x_0, t)
+        assert torch.allclose(x_t, x_0, atol=1e-5)
+
+    def test_forward_at_t_one(self, diffusion):
+        """At t=1, x_t should be approximately standard normal."""
+        x_0 = torch.randn(100, 1, 8, 8)
+        t = torch.ones(100)
+        x_t, _ = diffusion.forward(x_0, t)
+        # Should be close to N(0, 1)
+        assert abs(x_t.mean()) < 0.2
+        assert abs(x_t.std() - 1.0) < 0.2
+
+    def test_noise_is_standard_normal(self, diffusion, batch_data):
+        """Returned noise should be standard normal."""
+        x, t = batch_data
+        _, noise = diffusion.forward(x, t)
+        # Check noise statistics
+        assert abs(noise.mean()) < 0.5
+        assert abs(noise.std() - 1.0) < 0.5
+
+    def test_different_times_different_noise_levels(self, diffusion):
+        """Different times produce different noise levels."""
+        x_0 = torch.randn(1, 1, 16, 16)
+        t_low = torch.tensor([0.1])
+        t_high = torch.tensor([0.9])
+
+        x_t_low, _ = diffusion.forward(x_0, t_low)
+        x_t_high, _ = diffusion.forward(x_0, t_high)
+
+        # Higher t should have more noise (larger deviation from x_0)
+        diff_low = (x_t_low - x_0).abs().mean()
+        diff_high = (x_t_high - x_0).abs().mean()
+        assert diff_high > diff_low
