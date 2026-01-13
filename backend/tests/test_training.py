@@ -326,3 +326,51 @@ class TestTrainerCheckpointing:
             assert "train_loss" in checkpoint["history"]
             assert len(checkpoint["history"]["train_loss"]) == 3
             os.unlink(f.name)
+
+
+# ============================================================================
+# Training API Tests
+# ============================================================================
+
+
+class TestTrainingAPI:
+    """Tests for training API endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        """Create test client."""
+        from fastapi.testclient import TestClient
+        from backend.api.main import app
+
+        return TestClient(app)
+
+    def test_get_training_status(self, client):
+        """GET /training/status returns status."""
+        response = client.get("/training/status")
+        assert response.status_code == 200
+        data = response.json()
+        assert "is_training" in data
+        assert "progress" in data
+
+    def test_get_training_config(self, client):
+        """GET /training/config returns configuration."""
+        response = client.get("/training/config")
+        assert response.status_code == 200
+        data = response.json()
+        assert "recommended" in data
+        assert "limits" in data
+
+    def test_list_checkpoints(self, client):
+        """GET /training/checkpoints returns list."""
+        response = client.get("/training/checkpoints")
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+    def test_load_nonexistent_checkpoint(self, client):
+        """POST /training/checkpoints/load returns 404 for missing file."""
+        response = client.post(
+            "/training/checkpoints/load",
+            json={"checkpoint_name": "nonexistent.pt"},
+        )
+        assert response.status_code == 404
