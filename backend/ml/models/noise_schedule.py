@@ -178,3 +178,43 @@ class SigmoidNoiseSchedule(NoiseSchedule):
         sigmoid_input = self.start + (self.end - self.start) * t
         sigmoid_val = torch.sigmoid(sigmoid_input)
         return self.beta_min + (self.beta_max - self.beta_min) * sigmoid_val
+
+
+def get_schedule(
+    schedule_type: str = "linear",
+    beta_min: float = 0.1,
+    beta_max: float = 20.0,
+    **kwargs,
+) -> NoiseSchedule:
+    """Factory function to create noise schedules.
+
+    Args:
+        schedule_type: Type of schedule ("linear", "cosine", or "sigmoid")
+        beta_min: Minimum noise rate (for linear and sigmoid)
+        beta_max: Maximum noise rate (for linear and sigmoid)
+        **kwargs: Additional arguments for specific schedules
+
+    Returns:
+        NoiseSchedule instance
+
+    Raises:
+        ValueError: If schedule_type is unknown
+    """
+    schedule_type = schedule_type.lower()
+
+    if schedule_type == "linear":
+        return LinearNoiseSchedule(beta_min=beta_min, beta_max=beta_max)
+    elif schedule_type == "cosine":
+        s = kwargs.get("s", 0.008)
+        return CosineNoiseSchedule(s=s)
+    elif schedule_type == "sigmoid":
+        start = kwargs.get("start", -6.0)
+        end = kwargs.get("end", 6.0)
+        return SigmoidNoiseSchedule(
+            beta_min=beta_min, beta_max=beta_max, start=start, end=end
+        )
+    else:
+        raise ValueError(
+            f"Unknown schedule type: {schedule_type}. "
+            f"Choose from: linear, cosine, sigmoid"
+        )
