@@ -207,3 +207,66 @@ def importance_sampled_loss(
     loss = weight * ((pred - target) ** 2).mean()
 
     return loss
+
+
+# Type alias for weighting schemes
+WeightingType = Literal["uniform", "sigma", "snr", "importance"]
+
+
+class ScoreMatchingLoss(nn.Module):
+    """Configurable score matching loss for training diffusion models.
+
+    Provides a unified interface for various DSM loss variants with
+    configurable weighting schemes.
+    """
+
+    def __init__(
+        self,
+        diffusion: "DiffusionProcess",
+        weighting: WeightingType = "uniform",
+        snr_gamma: float = 1.0,
+        t_min: float = 0.001,
+        t_max: float = 0.999,
+    ):
+        """Initialize ScoreMatchingLoss.
+
+        Args:
+            diffusion: Diffusion process for forward noising
+            weighting: Loss weighting scheme:
+                - "uniform": Standard DSM loss
+                - "sigma": Weight by σ² (equivalent to noise prediction)
+                - "snr": Weight by SNR^gamma
+                - "importance": Truncated time distribution
+            snr_gamma: Exponent for SNR weighting (default: 1.0)
+            t_min: Minimum time for importance sampling (default: 0.001)
+            t_max: Maximum time for importance sampling (default: 0.999)
+        """
+        super().__init__()
+        self.diffusion = diffusion
+        self.weighting = weighting
+        self.snr_gamma = snr_gamma
+        self.t_min = t_min
+        self.t_max = t_max
+
+    def forward(self, model: nn.Module, x_0: torch.Tensor) -> torch.Tensor:
+        """Compute score matching loss.
+
+        Args:
+            model: Score network s_θ(x, t)
+            x_0: Clean samples of shape (batch, channels, height, width)
+
+        Returns:
+            Scalar loss value
+        """
+        if self.weighting == "uniform":
+            return denoising_score_matching_loss(model, x_0, self.diffusion)
+        elif self.weighting == "sigma":
+            return sigma_weighted_loss(model, x_0, self.diffusion)
+        elif self.weighting == "snr":
+            return snr_weighted_loss(model, x_0, self.diffusion, self.snr_gamma)
+        elif self.weighting == "importance":
+            return importance_sampled_loss(
+                model, x_0, self.diffusion, self.t_min, self.t_max
+            )
+        else:
+            raise ValueError(f"Unknown weighting scheme: {self.weighting}")
