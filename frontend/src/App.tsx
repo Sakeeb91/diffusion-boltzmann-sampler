@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSimulationStore, T_CRITICAL } from './store/simulationStore';
 import {
   checkHealth,

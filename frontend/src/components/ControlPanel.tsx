@@ -1,5 +1,4 @@
-import React from 'react';
-import { useSimulationStore, T_CRITICAL, SamplerType } from '../store/simulationStore';
+import { useSimulationStore, T_CRITICAL } from '../store/simulationStore';
 
 interface ControlPanelProps {
   onSample: () => void;

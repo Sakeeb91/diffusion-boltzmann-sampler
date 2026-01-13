@@ -37,7 +37,14 @@ export interface PhaseDiagramResponse {
   lattice_size: number;
 }
 
-export async function checkHealth(): Promise<{ status: string }> {
+export interface HealthResponse {
+  status: string;
+  version?: string;
+  title?: string;
+  features?: Record<string, boolean>;
+}
+
+export async function checkHealth(): Promise<HealthResponse> {
   const response = await fetch(`${API_BASE}/health`);
   if (!response.ok) throw new Error('Backend not available');
   return response.json();
