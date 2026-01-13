@@ -154,3 +154,54 @@ class TestHighTemperatureAcceptance:
         energy_tensor = torch.tensor(energies)
         std = energy_tensor.std().item()
         assert std > 1.0, f"Expected energy fluctuations, got std={std}"
+
+
+class TestLowTemperatureRejection:
+    """Tests for low temperature behavior (ordered phase)."""
+
+    def test_low_temperature_low_acceptance_from_ground(self, ising_model):
+        """At low temperature from ground state, most moves should be rejected."""
+        sampler = MetropolisHastings(ising_model, temperature=0.5)
+        # Start from ground state
+        spins = torch.ones(8, 8)
+
+        # Count accepted moves
+        accepted = 0
+        total = 1000
+        for _ in range(total):
+            spins_before = spins.clone()
+            spins = sampler.step(spins)
+            if not torch.allclose(spins, spins_before):
+                accepted += 1
+
+        # From ground state at low T, acceptance should be very low
+        acceptance_rate = accepted / total
+        assert acceptance_rate < 0.2, f"Expected low acceptance from ground, got {acceptance_rate}"
+
+    def test_low_temperature_maintains_order(self, low_temp_sampler, ising_model):
+        """At low temperature, ordered state should be maintained."""
+        # Start from ordered state
+        spins = torch.ones(8, 8)
+
+        # Run many sweeps at low temperature
+        for _ in range(100):
+            spins = low_temp_sampler.sweep(spins)
+
+        # Should remain ordered (|M| ≈ 1)
+        mag = abs(ising_model.magnetization(spins).item())
+        assert mag > 0.8, f"Expected |M| > 0.8 at low T, got {mag}"
+
+    def test_low_temperature_energy_near_ground(self, low_temp_sampler, ising_model):
+        """At low temperature, energy should stay near ground state."""
+        # Start from ordered state
+        spins = torch.ones(8, 8)
+        ground_energy = ising_model.energy(spins).item()
+
+        # Run many sweeps
+        for _ in range(100):
+            spins = low_temp_sampler.sweep(spins)
+
+        # Energy should be close to ground state
+        current_energy = ising_model.energy(spins).item()
+        energy_per_spin = (current_energy - ground_energy) / 64
+        assert energy_per_spin < 0.5, f"Expected energy near ground, got +{energy_per_spin} per spin"
