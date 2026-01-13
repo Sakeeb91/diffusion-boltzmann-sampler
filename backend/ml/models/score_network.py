@@ -98,9 +98,26 @@ class SelfAttention(nn.Module):
 
 
 class ConvBlock(nn.Module):
-    """Convolutional block with GroupNorm, SiLU, and time conditioning."""
+    """Convolutional block with GroupNorm, SiLU, and time conditioning.
 
-    def __init__(self, in_ch: int, out_ch: int, time_dim: int):
+    Includes residual scaling for training stability in deep networks.
+    """
+
+    def __init__(
+        self,
+        in_ch: int,
+        out_ch: int,
+        time_dim: int,
+        residual_scale: float = 1.0,
+    ):
+        """Initialize ConvBlock.
+
+        Args:
+            in_ch: Input channels
+            out_ch: Output channels
+            time_dim: Time embedding dimension
+            residual_scale: Scale factor for residual connection (default 1.0)
+        """
         super().__init__()
         self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1)
         self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1)
@@ -108,6 +125,7 @@ class ConvBlock(nn.Module):
         self.norm2 = nn.GroupNorm(min(8, out_ch), out_ch)
         self.time_mlp = nn.Linear(time_dim, out_ch)
         self.act = nn.SiLU()
+        self.residual_scale = residual_scale
 
         # Residual connection if dimensions match
         self.residual = nn.Conv2d(in_ch, out_ch, 1) if in_ch != out_ch else nn.Identity()
@@ -129,7 +147,8 @@ class ConvBlock(nn.Module):
 
         h = self.act(self.norm2(self.conv2(h)))
 
-        return h + self.residual(x)
+        # Scaled residual connection for training stability
+        return h + self.residual_scale * self.residual(x)
 
 
 class ScoreNetwork(nn.Module):
