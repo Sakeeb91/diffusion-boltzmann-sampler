@@ -386,3 +386,74 @@ class TestNoiseLevelConsistency:
         _, sigma_1 = diffusion.noise_level(t_one)
         assert sigma_0.item() < 0.1
         assert sigma_1.item() > 0.99
+
+
+# ============================================================================
+# NoiseSchedule Tests
+# ============================================================================
+
+
+class TestNoiseSchedules:
+    """Tests for noise schedule implementations."""
+
+    def test_linear_schedule_beta_range(self, linear_schedule):
+        """Linear schedule beta should be in [beta_min, beta_max]."""
+        t = torch.linspace(0, 1, 100)
+        beta = linear_schedule.beta(t)
+        assert (beta >= 0.1 - 1e-6).all()
+        assert (beta <= 20.0 + 1e-6).all()
+
+    def test_linear_schedule_beta_monotonic(self, linear_schedule):
+        """Linear schedule beta should increase with t."""
+        t = torch.linspace(0, 1, 100)
+        beta = linear_schedule.beta(t)
+        for i in range(len(t) - 1):
+            assert beta[i] <= beta[i + 1] + 1e-6
+
+    def test_cosine_schedule_smooth(self, cosine_schedule):
+        """Cosine schedule should produce smooth α values."""
+        t = torch.linspace(0, 1, 100)
+        alpha_t, _ = cosine_schedule.noise_level(t)
+        # Check no sudden jumps
+        diffs = torch.abs(alpha_t[1:] - alpha_t[:-1])
+        assert diffs.max() < 0.1
+
+    def test_cosine_schedule_boundaries(self, cosine_schedule):
+        """Cosine schedule should have proper boundary behavior."""
+        t_zero = torch.tensor([0.0])
+        t_one = torch.tensor([1.0])
+        alpha_0, _ = cosine_schedule.noise_level(t_zero)
+        alpha_1, _ = cosine_schedule.noise_level(t_one)
+        assert alpha_0.item() > 0.95
+        assert alpha_1.item() < 0.1
+
+    def test_sigmoid_schedule_beta_range(self, sigmoid_schedule):
+        """Sigmoid schedule beta should be in reasonable range."""
+        t = torch.linspace(0, 1, 100)
+        beta = sigmoid_schedule.beta(t)
+        assert (beta >= 0).all()
+        assert (beta <= 30.0).all()  # Allow some headroom
+
+    def test_get_schedule_factory(self):
+        """Factory function creates correct schedule types."""
+        linear = get_schedule("linear")
+        assert isinstance(linear, LinearNoiseSchedule)
+
+        cosine = get_schedule("cosine")
+        assert isinstance(cosine, CosineNoiseSchedule)
+
+        sigmoid = get_schedule("sigmoid")
+        assert isinstance(sigmoid, SigmoidNoiseSchedule)
+
+    def test_get_schedule_unknown_type(self):
+        """Factory raises error for unknown schedule type."""
+        with pytest.raises(ValueError):
+            get_schedule("unknown")
+
+    def test_diffusion_with_custom_schedule(self, cosine_schedule):
+        """DiffusionProcess works with custom schedule."""
+        diffusion = DiffusionProcess(schedule=cosine_schedule)
+        x_0 = torch.randn(2, 1, 16, 16)
+        t = torch.tensor([0.5, 0.5])
+        x_t, noise = diffusion.forward(x_0, t)
+        assert x_t.shape == x_0.shape
