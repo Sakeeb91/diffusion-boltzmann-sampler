@@ -164,6 +164,8 @@ class ScoreNetwork(nn.Module):
         base_channels: int = 32,
         time_embed_dim: int = 64,
         num_blocks: int = 3,
+        output_scale: float = 1.0,
+        normalize_output: bool = False,
     ):
         """Initialize score network.
 
@@ -172,8 +174,12 @@ class ScoreNetwork(nn.Module):
             base_channels: Base number of channels (doubled at each level)
             time_embed_dim: Dimension of time embedding
             num_blocks: Number of encoder/decoder blocks
+            output_scale: Scale factor for output scores (default 1.0)
+            normalize_output: If True, normalize output to unit variance
         """
         super().__init__()
+        self.output_scale = output_scale
+        self.normalize_output = normalize_output
 
         self.time_embed = SinusoidalTimeEmbedding(time_embed_dim)
         self.time_mlp = nn.Sequential(
@@ -250,7 +256,16 @@ class ScoreNetwork(nn.Module):
             h = torch.cat([h, skip], dim=1)
             h = block(h, t_emb)
 
-        return self.final(h)
+        score = self.final(h)
+
+        # Optional output normalization for stability
+        if self.normalize_output:
+            # Normalize to unit variance per sample
+            std = score.std(dim=(-1, -2), keepdim=True) + 1e-8
+            score = score / std
+
+        # Apply output scaling
+        return self.output_scale * score
 
 
 if __name__ == "__main__":
