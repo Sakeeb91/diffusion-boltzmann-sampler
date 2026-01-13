@@ -112,6 +112,48 @@ class DiffusionProcess:
         """
         return -noise / (sigma_t + 1e-8)
 
+    def reverse_step(
+        self,
+        x_t: torch.Tensor,
+        score: torch.Tensor,
+        t: torch.Tensor,
+        dt: float,
+        stochastic: bool = True,
+    ) -> torch.Tensor:
+        """Perform one reverse diffusion step.
+
+        Reverse SDE: dx = [-0.5 β(t) x - β(t) s(x,t)] dt + √β(t) dW
+
+        Args:
+            x_t: Current state at time t
+            score: Score prediction s(x, t) from neural network
+            t: Current time
+            dt: Time step size (negative, going from t=1 to t=0)
+            stochastic: If True, add noise (SDE); if False, deterministic (ODE)
+
+        Returns:
+            x_{t+dt}: State at time t + dt
+        """
+        beta_t = self.beta(t)
+
+        # Reshape for broadcasting
+        if beta_t.dim() == 1:
+            beta_t = beta_t[:, None, None, None]
+
+        # Drift term: -0.5 β(t) x - β(t) s(x,t)
+        drift = -0.5 * beta_t * x_t - beta_t * score
+
+        # Compute next state
+        x_next = x_t + drift * dt
+
+        if stochastic:
+            # Diffusion term: √β(t) * √|dt| * z, z ~ N(0, I)
+            noise = torch.randn_like(x_t)
+            diffusion = torch.sqrt(beta_t * torch.abs(torch.tensor(dt))) * noise
+            x_next = x_next + diffusion
+
+        return x_next
+
 
 if __name__ == "__main__":
     # Test diffusion process
