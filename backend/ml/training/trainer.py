@@ -1,15 +1,17 @@
 """Training loop for denoising score matching."""
 
 import torch
+import torch.nn as nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader, TensorDataset
-from typing import Optional, Callable, Dict, List
+from typing import Optional, Callable, Dict, List, Union
 from tqdm import tqdm
 
 from ..models.score_network import ScoreNetwork
 from ..models.diffusion import DiffusionProcess
 from ..systems.ising import IsingModel
 from ..samplers.mcmc import MetropolisHastings
+from .losses import ScoreMatchingLoss, WeightingType
 
 
 class Trainer:
@@ -21,6 +23,7 @@ class Trainer:
         diffusion: Optional[DiffusionProcess] = None,
         learning_rate: float = 1e-3,
         device: str = "cpu",
+        loss_weighting: WeightingType = "uniform",
     ):
         """Initialize trainer.
 
@@ -29,11 +32,19 @@ class Trainer:
             diffusion: Diffusion process (default: VP-SDE)
             learning_rate: Learning rate for Adam optimizer
             device: Device to train on
+            loss_weighting: Loss weighting scheme ("uniform", "sigma", "snr", "importance")
         """
         self.model = score_network.to(device)
         self.diffusion = diffusion or DiffusionProcess()
         self.device = device
         self.optimizer = Adam(self.model.parameters(), lr=learning_rate)
+        self.loss_weighting = loss_weighting
+
+        # Create loss function using the losses module
+        self.loss_fn = ScoreMatchingLoss(
+            diffusion=self.diffusion,
+            weighting=loss_weighting,
+        )
 
         self.history: Dict[str, List[float]] = {
             "train_loss": [],
