@@ -346,3 +346,64 @@ class TestSampleWithTrajectory:
         energies = [ising_model.energy(f).item() for f in frames]
         energy_std = torch.tensor(energies).std().item()
         assert energy_std > 0, "Expected trajectory evolution"
+
+
+class TestThermalizationConvergence:
+    """Tests for thermalization and convergence behavior."""
+
+    def test_ordered_to_disordered_thermalization(self, ising_model):
+        """System should thermalize from ordered to disordered at high T."""
+        sampler = MetropolisHastings(ising_model, temperature=5.0)
+
+        # Start from perfectly ordered state
+        spins = torch.ones(8, 8)
+        initial_mag = abs(ising_model.magnetization(spins).item())
+        assert initial_mag == 1.0
+
+        # Run many sweeps
+        for _ in range(200):
+            spins = sampler.sweep(spins)
+
+        # Should thermalize to disordered
+        final_mag = abs(ising_model.magnetization(spins).item())
+        assert final_mag < 0.5, f"Expected thermalization to disorder, got |M|={final_mag}"
+
+    def test_disordered_to_ordered_thermalization(self, ising_model):
+        """System should thermalize from disordered to ordered at low T."""
+        sampler = MetropolisHastings(ising_model, temperature=0.5)
+
+        # Start from random state
+        spins = ising_model.random_configuration(batch_size=1).squeeze(0)
+
+        # Run many sweeps
+        for _ in range(500):
+            spins = sampler.sweep(spins)
+
+        # Should thermalize to ordered
+        final_mag = abs(ising_model.magnetization(spins).item())
+        assert final_mag > 0.8, f"Expected thermalization to order, got |M|={final_mag}"
+
+    def test_critical_temperature_behavior(self, ising_model):
+        """At critical temperature, system should show intermediate behavior."""
+        # T_c ≈ 2.269 for 2D Ising
+        sampler = MetropolisHastings(ising_model, temperature=2.27)
+
+        # Start from random state
+        spins = ising_model.random_configuration(batch_size=1).squeeze(0)
+
+        # Collect magnetization samples after thermalization
+        for _ in range(100):  # Burn-in
+            spins = sampler.sweep(spins)
+
+        mags = []
+        for _ in range(50):
+            for _ in range(10):  # Spacing
+                spins = sampler.sweep(spins)
+            mags.append(abs(ising_model.magnetization(spins).item()))
+
+        # At T_c, should see fluctuations (not stuck at 0 or 1)
+        avg_mag = sum(mags) / len(mags)
+        mag_std = torch.tensor(mags).std().item()
+
+        # Intermediate behavior: not fully ordered, not fully disordered
+        assert 0.1 < avg_mag < 0.9, f"Expected intermediate magnetization, got {avg_mag}"
