@@ -70,3 +70,47 @@ def checkerboard_spins():
     spins[::2, 1::2] = -1
     spins[1::2, ::2] = -1
     return spins
+
+
+# Temperature fixtures for phase transition testing
+@pytest.fixture
+def critical_temperature():
+    """Critical temperature for 2D Ising model."""
+    return 2.269
+
+
+@pytest.fixture
+def subcritical_temperature():
+    """Temperature below T_c (ordered phase)."""
+    return 1.5
+
+
+@pytest.fixture
+def supercritical_temperature():
+    """Temperature above T_c (disordered phase)."""
+    return 4.0
+
+
+# Sampling parameter fixtures
+@pytest.fixture
+def default_mcmc_params():
+    """Default parameters for MCMC sampling API requests."""
+    return {
+        "temperature": 2.27,
+        "lattice_size": 16,
+        "n_samples": 5,
+        "n_sweeps": 10,
+        "burn_in": 50,
+    }
+
+
+@pytest.fixture
+def fast_mcmc_params():
+    """Fast parameters for quick testing."""
+    return {
+        "temperature": 2.27,
+        "lattice_size": 8,
+        "n_samples": 2,
+        "n_sweeps": 5,
+        "burn_in": 10,
+    }
