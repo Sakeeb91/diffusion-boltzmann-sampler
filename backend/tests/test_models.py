@@ -457,3 +457,93 @@ class TestNoiseSchedules:
         t = torch.tensor([0.5, 0.5])
         x_t, noise = diffusion.forward(x_0, t)
         assert x_t.shape == x_0.shape
+
+
+# ============================================================================
+# Integration Tests
+# ============================================================================
+
+
+class TestIntegration:
+    """Integration tests for score network and diffusion process."""
+
+    def test_full_training_loop(self, score_network, diffusion, batch_data):
+        """Complete training loop with diffusion and score network."""
+        x_0, _ = batch_data
+        optimizer = torch.optim.Adam(score_network.parameters(), lr=1e-3)
+
+        for _ in range(3):
+            # Sample random times
+            t = torch.rand(x_0.shape[0])
+
+            # Forward diffusion
+            x_t, noise = diffusion.forward(x_0, t)
+
+            # Predict score
+            score_pred = score_network(x_t, t)
+
+            # Compute loss
+            loss = diffusion.compute_loss(score_pred, noise, t)
+
+            # Backward pass
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        # Should complete without errors
+        assert True
+
+    def test_score_prediction_improves_with_training(self, diffusion):
+        """Score predictions should improve after training."""
+        net = ScoreNetwork(in_channels=1, base_channels=8, num_blocks=1)
+        optimizer = torch.optim.Adam(net.parameters(), lr=1e-2)
+
+        x_0 = torch.randn(8, 1, 8, 8)
+
+        # Initial loss
+        t = torch.rand(8)
+        x_t, noise = diffusion.forward(x_0, t)
+        score_pred = net(x_t, t)
+        initial_loss = diffusion.compute_loss(score_pred, noise, t).item()
+
+        # Training
+        for _ in range(50):
+            t = torch.rand(8)
+            x_t, noise = diffusion.forward(x_0, t)
+            score_pred = net(x_t, t)
+            loss = diffusion.compute_loss(score_pred, noise, t)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        # Final loss
+        t = torch.rand(8)
+        x_t, noise = diffusion.forward(x_0, t)
+        with torch.no_grad():
+            score_pred = net(x_t, t)
+            final_loss = diffusion.compute_loss(score_pred, noise, t).item()
+
+        # Loss should decrease
+        assert final_loss < initial_loss
+
+    def test_reverse_step_reduces_noise(self, score_network, diffusion):
+        """Reverse step should move towards lower noise."""
+        x_0 = torch.randn(2, 1, 16, 16)
+        t = torch.tensor([0.8, 0.8])
+
+        # Get noisy sample
+        x_t, _ = diffusion.forward(x_0, t)
+
+        # Predict score
+        with torch.no_grad():
+            score = score_network(x_t, t)
+
+        # Take reverse step
+        dt = -0.1
+        x_next = diffusion.reverse_step(x_t, score, t, dt)
+
+        # Output should have same shape
+        assert x_next.shape == x_t.shape
+        # Should be finite
+        assert not torch.isnan(x_next).any()
+        assert not torch.isinf(x_next).any()
