@@ -38,3 +38,34 @@ class TestMetropolisHastingsInit:
         """Zero temperature should give infinite beta."""
         sampler = MetropolisHastings(ising_model, temperature=0.0)
         assert sampler.beta == float("inf")
+
+
+class TestMetropolisHastingsStep:
+    """Tests for single Metropolis step."""
+
+    def test_step_returns_tensor(self, mcmc_sampler, random_spins):
+        """Step should return a tensor."""
+        result = mcmc_sampler.step(random_spins.clone())
+        assert isinstance(result, torch.Tensor)
+
+    def test_step_preserves_shape(self, mcmc_sampler, random_spins):
+        """Step should preserve spin configuration shape."""
+        spins = random_spins.clone()
+        result = mcmc_sampler.step(spins)
+        assert result.shape == random_spins.shape
+
+    def test_step_preserves_spin_values(self, mcmc_sampler, random_spins):
+        """Step should only produce ±1 values."""
+        spins = random_spins.clone()
+        for _ in range(100):
+            spins = mcmc_sampler.step(spins)
+        unique = torch.unique(spins)
+        assert len(unique) <= 2
+        assert all(v in [-1, 1] for v in unique.tolist())
+
+    def test_step_modifies_at_most_one_spin(self, mcmc_sampler, random_spins):
+        """Single step should flip at most one spin."""
+        spins_before = random_spins.clone()
+        spins_after = mcmc_sampler.step(spins_before.clone())
+        diff = (spins_before != spins_after).sum()
+        assert diff <= 1
