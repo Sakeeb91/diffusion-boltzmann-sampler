@@ -47,6 +47,22 @@ def create_scheduler(
         raise ValueError(f"Unknown scheduler type: {scheduler_type}")
 
 
+def compute_gradient_norm(model: nn.Module) -> float:
+    """Compute total gradient norm across all parameters.
+
+    Args:
+        model: Model with gradients computed
+
+    Returns:
+        Total gradient L2 norm
+    """
+    total_norm = 0.0
+    for param in model.parameters():
+        if param.grad is not None:
+            total_norm += param.grad.data.norm(2).item() ** 2
+    return total_norm ** 0.5
+
+
 class EMA:
     """Exponential Moving Average of model parameters.
 
