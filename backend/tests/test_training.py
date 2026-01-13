@@ -144,3 +144,85 @@ class TestReduceLoss:
         """Invalid reduction raises ValueError."""
         with pytest.raises(ValueError):
             reduce_loss(torch.zeros(1), reduction="invalid")
+
+
+class TestDSMLossFunctions:
+    """Tests for denoising score matching loss functions."""
+
+    def test_dsm_loss_returns_scalar(self, small_score_network, diffusion, sample_batch):
+        """DSM loss returns a scalar tensor."""
+        loss = denoising_score_matching_loss(small_score_network, sample_batch, diffusion)
+        assert loss.dim() == 0
+        assert loss.item() > 0
+
+    def test_sigma_weighted_loss_returns_scalar(
+        self, small_score_network, diffusion, sample_batch
+    ):
+        """Sigma-weighted loss returns a scalar tensor."""
+        loss = sigma_weighted_loss(small_score_network, sample_batch, diffusion)
+        assert loss.dim() == 0
+        assert loss.item() > 0
+
+    def test_snr_weighted_loss_returns_scalar(
+        self, small_score_network, diffusion, sample_batch
+    ):
+        """SNR-weighted loss returns a scalar tensor."""
+        loss = snr_weighted_loss(small_score_network, sample_batch, diffusion)
+        assert loss.dim() == 0
+        assert loss.item() > 0
+
+    def test_importance_sampled_loss_returns_scalar(
+        self, small_score_network, diffusion, sample_batch
+    ):
+        """Importance-sampled loss returns a scalar tensor."""
+        loss = importance_sampled_loss(small_score_network, sample_batch, diffusion)
+        assert loss.dim() == 0
+        assert loss.item() > 0
+
+    def test_loss_is_differentiable(self, small_score_network, diffusion, sample_batch):
+        """Loss can be backpropagated."""
+        loss = denoising_score_matching_loss(small_score_network, sample_batch, diffusion)
+        loss.backward()
+
+        # Check gradients exist
+        for param in small_score_network.parameters():
+            assert param.grad is not None
+
+
+class TestScoreMatchingLossClass:
+    """Tests for ScoreMatchingLoss class."""
+
+    def test_uniform_weighting(self, small_score_network, diffusion, sample_batch):
+        """Uniform weighting computes standard DSM loss."""
+        loss_fn = ScoreMatchingLoss(diffusion, weighting="uniform")
+        loss = loss_fn(small_score_network, sample_batch)
+        assert loss.dim() == 0
+        assert loss.item() > 0
+
+    def test_sigma_weighting(self, small_score_network, diffusion, sample_batch):
+        """Sigma weighting works correctly."""
+        loss_fn = ScoreMatchingLoss(diffusion, weighting="sigma")
+        loss = loss_fn(small_score_network, sample_batch)
+        assert loss.dim() == 0
+        assert loss.item() > 0
+
+    def test_snr_weighting(self, small_score_network, diffusion, sample_batch):
+        """SNR weighting works correctly."""
+        loss_fn = ScoreMatchingLoss(diffusion, weighting="snr", snr_gamma=0.5)
+        loss = loss_fn(small_score_network, sample_batch)
+        assert loss.dim() == 0
+        assert loss.item() > 0
+
+    def test_importance_weighting(self, small_score_network, diffusion, sample_batch):
+        """Importance weighting works correctly."""
+        loss_fn = ScoreMatchingLoss(diffusion, weighting="importance")
+        loss = loss_fn(small_score_network, sample_batch)
+        assert loss.dim() == 0
+        assert loss.item() > 0
+
+    def test_invalid_weighting_raises(self, diffusion, small_score_network, sample_batch):
+        """Invalid weighting raises ValueError."""
+        loss_fn = ScoreMatchingLoss(diffusion, weighting="uniform")
+        loss_fn.weighting = "invalid"  # Force invalid weighting
+        with pytest.raises(ValueError):
+            loss_fn(small_score_network, sample_batch)
