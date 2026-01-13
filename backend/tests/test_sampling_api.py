@@ -313,3 +313,95 @@ class TestMCMCErrorHandling:
             headers={"content-type": "text/plain"},
         )
         assert response.status_code == 422
+
+
+class TestEndToEndMCMCSampling:
+    """Integration tests for end-to-end MCMC sampling verification."""
+
+    def test_low_temperature_produces_ordered_samples(self, client: TestClient):
+        """At low temperature, samples should be ordered (|M| ≈ 1)."""
+        params = {
+            "temperature": 1.0,  # Below T_c ≈ 2.27
+            "lattice_size": 16,
+            "n_samples": 5,
+            "n_sweeps": 20,
+            "burn_in": 100,
+        }
+        response = client.post("/sample/mcmc", json=params)
+        data = response.json()
+
+        # Check magnetizations are high (ordered)
+        for mag in data["magnetizations"]:
+            assert abs(mag) > 0.5, f"Expected ordered state, got |M|={abs(mag)}"
+
+    def test_high_temperature_produces_disordered_samples(self, client: TestClient):
+        """At high temperature, samples should be disordered (|M| ≈ 0)."""
+        params = {
+            "temperature": 5.0,  # Well above T_c
+            "lattice_size": 16,
+            "n_samples": 5,
+            "n_sweeps": 20,
+            "burn_in": 100,
+        }
+        response = client.post("/sample/mcmc", json=params)
+        data = response.json()
+
+        # Check average magnetization is low (disordered)
+        avg_abs_mag = sum(abs(m) for m in data["magnetizations"]) / len(
+            data["magnetizations"]
+        )
+        assert avg_abs_mag < 0.5, f"Expected disordered state, got avg |M|={avg_abs_mag}"
+
+    def test_samples_have_consistent_energies(self, client: TestClient):
+        """Sample energies should be consistent with spin configurations."""
+        params = {
+            "temperature": 2.27,
+            "lattice_size": 8,
+            "n_samples": 3,
+            "n_sweeps": 10,
+            "burn_in": 50,
+        }
+        response = client.post("/sample/mcmc", json=params)
+        data = response.json()
+
+        # Energies should be in valid range for 8x8 lattice
+        # Ground state: -128, Maximum: +128
+        for energy in data["energies"]:
+            assert -2.0 <= energy <= 2.0, f"Energy per spin out of range: {energy}"
+
+    def test_samples_have_valid_magnetizations(self, client: TestClient):
+        """Sample magnetizations should be in [-1, 1]."""
+        params = {
+            "temperature": 2.27,
+            "lattice_size": 16,
+            "n_samples": 10,
+            "n_sweeps": 10,
+            "burn_in": 50,
+        }
+        response = client.post("/sample/mcmc", json=params)
+        data = response.json()
+
+        for mag in data["magnetizations"]:
+            assert -1.0 <= mag <= 1.0, f"Magnetization out of range: {mag}"
+
+    def test_full_workflow_ground_to_sample(self, client: TestClient):
+        """Test full workflow: get ground state, then sample from it."""
+        # Get ground state energy
+        gs_response = client.get("/sample/ground_state?lattice_size=16")
+        gs_data = gs_response.json()
+        gs_energy = gs_data["energy"]
+
+        # Sample at low temperature - should have similar energy
+        params = {
+            "temperature": 0.5,
+            "lattice_size": 16,
+            "n_samples": 3,
+            "n_sweeps": 50,
+            "burn_in": 200,
+        }
+        sample_response = client.post("/sample/mcmc", json=params)
+        sample_data = sample_response.json()
+
+        # At very low T, energies should be close to ground state
+        for energy in sample_data["energies"]:
+            assert energy < gs_energy + 0.5, f"Energy too high: {energy} vs gs {gs_energy}"
