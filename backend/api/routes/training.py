@@ -1,10 +1,16 @@
 """Training API routes."""
 
+import os
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import torch
 from torch.utils.data import DataLoader, TensorDataset
+
+# Default checkpoint directory
+CHECKPOINT_DIR = Path("checkpoints")
+CHECKPOINT_DIR.mkdir(exist_ok=True)
 
 from ...ml.systems.ising import IsingModel
 from ...ml.models.score_network import ScoreNetwork
@@ -166,3 +172,37 @@ async def get_training_config() -> Dict[str, Any]:
             "training_time": "~1 minute per 100 samples on CPU",
         },
     }
+
+
+class CheckpointInfo(BaseModel):
+    """Information about a saved checkpoint."""
+
+    name: str
+    path: str
+    size_bytes: int
+    modified_time: str
+
+
+@router.get("/checkpoints", response_model=List[CheckpointInfo])
+async def list_checkpoints() -> List[CheckpointInfo]:
+    """List all available checkpoints.
+
+    Returns list of checkpoint files in the checkpoints directory.
+    """
+    checkpoints = []
+
+    if CHECKPOINT_DIR.exists():
+        for file in CHECKPOINT_DIR.glob("*.pt"):
+            stat = file.stat()
+            checkpoints.append(
+                CheckpointInfo(
+                    name=file.name,
+                    path=str(file),
+                    size_bytes=stat.st_size,
+                    modified_time=str(stat.st_mtime),
+                )
+            )
+
+    # Sort by modification time (newest first)
+    checkpoints.sort(key=lambda x: x.modified_time, reverse=True)
+    return checkpoints
