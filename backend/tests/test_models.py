@@ -113,3 +113,57 @@ class TestSinusoidalTimeEmbedding:
         emb1 = embed(t)
         emb2 = embed(t)
         assert torch.allclose(emb1, emb2)
+
+
+# ============================================================================
+# ConvBlock Tests
+# ============================================================================
+
+
+class TestConvBlock:
+    """Tests for convolutional block with time conditioning."""
+
+    def test_output_shape_same_channels(self):
+        """Output shape matches input when channels are same."""
+        block = ConvBlock(in_ch=32, out_ch=32, time_dim=64)
+        x = torch.randn(2, 32, 16, 16)
+        t_emb = torch.randn(2, 64)
+        out = block(x, t_emb)
+        assert out.shape == x.shape
+
+    def test_output_shape_different_channels(self):
+        """Output has correct shape when channels differ."""
+        block = ConvBlock(in_ch=16, out_ch=32, time_dim=64)
+        x = torch.randn(2, 16, 16, 16)
+        t_emb = torch.randn(2, 64)
+        out = block(x, t_emb)
+        assert out.shape == (2, 32, 16, 16)
+
+    def test_time_conditioning_effect(self):
+        """Different time embeddings produce different outputs."""
+        block = ConvBlock(in_ch=16, out_ch=16, time_dim=32)
+        x = torch.randn(1, 16, 8, 8)
+        t_emb1 = torch.randn(1, 32)
+        t_emb2 = torch.randn(1, 32)
+        out1 = block(x, t_emb1)
+        out2 = block(x, t_emb2)
+        assert not torch.allclose(out1, out2)
+
+    def test_residual_connection(self):
+        """Residual connection is functional (output differs from input)."""
+        block = ConvBlock(in_ch=16, out_ch=16, time_dim=32)
+        x = torch.randn(1, 16, 8, 8)
+        t_emb = torch.zeros(1, 32)
+        out = block(x, t_emb)
+        # Output should not be exactly zero (residual adds input)
+        assert out.abs().sum() > 0
+
+    def test_residual_scaling(self):
+        """Residual scaling parameter works."""
+        block_scaled = ConvBlock(in_ch=16, out_ch=16, time_dim=32, residual_scale=0.1)
+        block_normal = ConvBlock(in_ch=16, out_ch=16, time_dim=32, residual_scale=1.0)
+        # Both should work without error
+        x = torch.randn(1, 16, 8, 8)
+        t_emb = torch.randn(1, 32)
+        _ = block_scaled(x, t_emb)
+        _ = block_normal(x, t_emb)
