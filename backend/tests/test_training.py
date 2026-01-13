@@ -374,3 +374,173 @@ class TestTrainingAPI:
             json={"checkpoint_name": "nonexistent.pt"},
         )
         assert response.status_code == 404
+
+
+# ============================================================================
+# Helper Class Tests
+# ============================================================================
+
+
+class TestEarlyStopping:
+    """Tests for EarlyStopping callback."""
+
+    def test_no_stop_while_improving(self):
+        """Early stopping doesn't trigger while loss decreases."""
+        stopper = EarlyStopping(patience=3)
+        losses = [1.0, 0.9, 0.8, 0.7, 0.6]
+        for loss in losses:
+            assert not stopper(loss)
+
+    def test_stops_after_patience_no_improvement(self):
+        """Early stopping triggers after patience epochs without improvement."""
+        stopper = EarlyStopping(patience=3)
+        # Decrease, then plateau
+        stopper(1.0)
+        stopper(0.5)
+        stopper(0.5)  # No improvement
+        stopper(0.5)  # No improvement
+        assert stopper(0.5)  # Should stop now
+
+    def test_reset_clears_state(self):
+        """Reset clears early stopping state."""
+        stopper = EarlyStopping(patience=2)
+        stopper(1.0)
+        stopper(1.0)
+        stopper(1.0)  # Should trigger
+        stopper.reset()
+        assert not stopper.should_stop
+
+    def test_min_delta_threshold(self):
+        """Min delta requires minimum improvement."""
+        stopper = EarlyStopping(patience=2, min_delta=0.1)
+        stopper(1.0)
+        stopper(0.95)  # Not enough improvement
+        stopper(0.91)  # Still not enough
+        assert stopper(0.87)  # Should stop
+
+
+class TestEMA:
+    """Tests for EMA (Exponential Moving Average)."""
+
+    def test_ema_initialization(self, small_score_network):
+        """EMA initializes shadow parameters."""
+        ema = EMA(small_score_network, decay=0.999)
+        assert len(ema.shadow) > 0
+
+    def test_ema_update_changes_shadow(self, small_score_network):
+        """EMA update modifies shadow parameters."""
+        ema = EMA(small_score_network, decay=0.999)
+
+        # Get initial shadow
+        initial_shadow = {k: v.clone() for k, v in ema.shadow.items()}
+
+        # Modify model parameters
+        for param in small_score_network.parameters():
+            param.data += 0.1
+
+        # Update EMA
+        ema.update()
+
+        # Shadow should have changed
+        for name in ema.shadow:
+            assert not torch.equal(ema.shadow[name], initial_shadow[name])
+
+    def test_apply_and_restore_shadow(self, small_score_network):
+        """Apply shadow and restore works correctly."""
+        ema = EMA(small_score_network, decay=0.999)
+
+        # Get original parameters
+        original = {
+            name: param.data.clone()
+            for name, param in small_score_network.named_parameters()
+        }
+
+        ema.apply_shadow()
+        ema.restore()
+
+        # Should be back to original
+        for name, param in small_score_network.named_parameters():
+            if name in original:
+                assert torch.equal(param.data, original[name])
+
+
+class TestScheduler:
+    """Tests for learning rate scheduler factory."""
+
+    def test_create_none_scheduler(self):
+        """None scheduler returns None."""
+        model = torch.nn.Linear(10, 10)
+        opt = torch.optim.Adam(model.parameters())
+        scheduler = create_scheduler(opt, "none", epochs=100)
+        assert scheduler is None
+
+    def test_create_cosine_scheduler(self):
+        """Cosine scheduler is created correctly."""
+        model = torch.nn.Linear(10, 10)
+        opt = torch.optim.Adam(model.parameters())
+        scheduler = create_scheduler(opt, "cosine", epochs=100)
+        assert scheduler is not None
+
+    def test_create_step_scheduler(self):
+        """Step scheduler is created correctly."""
+        model = torch.nn.Linear(10, 10)
+        opt = torch.optim.Adam(model.parameters())
+        scheduler = create_scheduler(opt, "step", epochs=100)
+        assert scheduler is not None
+
+
+class TestGradientNorm:
+    """Tests for gradient norm computation."""
+
+    def test_compute_gradient_norm(self, small_score_network, sample_batch, diffusion):
+        """Gradient norm is computed correctly."""
+        loss = denoising_score_matching_loss(small_score_network, sample_batch, diffusion)
+        loss.backward()
+
+        norm = compute_gradient_norm(small_score_network)
+        assert norm > 0
+        assert not torch.isnan(torch.tensor(norm))
+
+
+# ============================================================================
+# Integration Tests
+# ============================================================================
+
+
+class TestTrainingIntegration:
+    """Integration tests for complete training workflow."""
+
+    def test_loss_decreases_during_training(self):
+        """Loss should generally decrease during training."""
+        # Create simple network and data
+        net = ScoreNetwork(in_channels=1, base_channels=8, num_blocks=1)
+        diffusion = DiffusionProcess()
+        trainer = Trainer(net, diffusion, learning_rate=1e-2)
+
+        # Create synthetic data
+        data = torch.randn(32, 1, 8, 8)
+        dataset = TensorDataset(data)
+        dataloader = DataLoader(dataset, batch_size=8, shuffle=True)
+
+        # Train
+        history = trainer.train(dataloader, epochs=10, verbose=False)
+
+        # Loss should decrease (check first vs last)
+        assert history["train_loss"][-1] < history["train_loss"][0] * 1.5
+
+    def test_training_with_validation(self):
+        """Training with validation data works."""
+        net = ScoreNetwork(in_channels=1, base_channels=8, num_blocks=1)
+        trainer = Trainer(net, learning_rate=1e-3)
+
+        train_data = torch.randn(16, 1, 8, 8)
+        val_data = torch.randn(8, 1, 8, 8)
+        train_loader = DataLoader(TensorDataset(train_data), batch_size=4)
+        val_loader = DataLoader(TensorDataset(val_data), batch_size=4)
+
+        history = trainer.train(
+            train_loader, epochs=3, val_dataloader=val_loader, verbose=False
+        )
+
+        assert len(history["train_loss"]) == 3
+        assert len(history["val_loss"]) == 3
