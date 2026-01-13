@@ -103,3 +103,57 @@ def sigma_weighted_loss(
     loss = (weights * (pred - target) ** 2).mean()
 
     return loss
+
+
+def snr_weighted_loss(
+    model: nn.Module,
+    x_0: torch.Tensor,
+    diffusion: "DiffusionProcess",
+    gamma: float = 1.0,
+) -> torch.Tensor:
+    """Compute SNR-weighted denoising score matching loss.
+
+    Weights the loss by SNR^gamma where SNR = α²/σ².
+    Higher gamma emphasizes low-noise (high SNR) timesteps.
+
+    Loss: E_t E_{x_t|x_0} SNR(t)^γ ||s_θ(x_t, t) - ∇log p(x_t|x_0)||²
+
+    Args:
+        model: Score network s_θ(x, t)
+        x_0: Clean samples of shape (batch, channels, height, width)
+        diffusion: Diffusion process for forward noising
+        gamma: SNR weighting exponent (default: 1.0)
+
+    Returns:
+        Scalar loss value
+    """
+    batch_size = x_0.shape[0]
+    device = x_0.device
+
+    # Sample time uniformly
+    t = torch.rand(batch_size, device=device)
+
+    # Get noisy samples
+    x_t, noise = diffusion.forward(x_0, t)
+
+    # Get noise levels
+    alpha_t, sigma_t = diffusion.noise_level(t)
+
+    # Compute SNR = α²/σ²
+    snr = (alpha_t ** 2) / (sigma_t ** 2 + EPS)
+    snr_weights = snr ** gamma
+
+    # Expand for broadcasting
+    sigma_t_expanded = sigma_t[:, None, None, None]
+    snr_weights_expanded = snr_weights[:, None, None, None]
+
+    # Target score
+    target = diffusion.score_target(noise, sigma_t_expanded)
+
+    # Predicted score
+    pred = model(x_t, t)
+
+    # SNR-weighted MSE
+    loss = (snr_weights_expanded * (pred - target) ** 2).mean()
+
+    return loss
