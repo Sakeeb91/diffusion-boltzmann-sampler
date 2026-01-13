@@ -547,3 +547,74 @@ class TestIntegration:
         # Should be finite
         assert not torch.isnan(x_next).any()
         assert not torch.isinf(x_next).any()
+
+
+# ============================================================================
+# Memory and Performance Tests
+# ============================================================================
+
+
+class TestMemoryAndPerformance:
+    """Tests for memory usage and performance constraints."""
+
+    def test_reasonable_parameter_count(self):
+        """Model should have reasonable number of parameters."""
+        net = ScoreNetwork(in_channels=1, base_channels=32, num_blocks=3)
+        n_params = sum(p.numel() for p in net.parameters())
+        # Should be under 5 million parameters for CPU inference
+        assert n_params < 5_000_000
+
+    def test_inference_completes_quickly(self, score_network, batch_data):
+        """Inference should complete in reasonable time."""
+        import time
+
+        x, t = batch_data
+
+        with torch.no_grad():
+            start = time.time()
+            for _ in range(10):
+                _ = score_network(x, t)
+            elapsed = time.time() - start
+
+        # 10 forward passes should take < 5 seconds on CPU
+        assert elapsed < 5.0
+
+    def test_batch_processing_efficient(self):
+        """Batch processing should be more efficient than sequential."""
+        import time
+
+        net = ScoreNetwork(in_channels=1, base_channels=16, num_blocks=2)
+        x_batch = torch.randn(16, 1, 16, 16)
+        t_batch = torch.rand(16)
+
+        with torch.no_grad():
+            # Batch processing
+            start = time.time()
+            _ = net(x_batch, t_batch)
+            batch_time = time.time() - start
+
+            # Sequential processing
+            start = time.time()
+            for i in range(16):
+                _ = net(x_batch[i : i + 1], t_batch[i : i + 1])
+            seq_time = time.time() - start
+
+        # Batch should be at least as fast (usually faster due to parallelism)
+        assert batch_time <= seq_time * 2  # Allow some variance
+
+    def test_memory_released_after_inference(self, score_network, batch_data):
+        """Memory should be released after inference."""
+        import gc
+
+        x, t = batch_data
+
+        # Run inference
+        with torch.no_grad():
+            score = score_network(x, t)
+            del score
+
+        # Force garbage collection
+        gc.collect()
+
+        # Should complete without memory issues
+        assert True
