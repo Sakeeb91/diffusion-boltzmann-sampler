@@ -63,6 +63,66 @@ def compute_gradient_norm(model: nn.Module) -> float:
     return total_norm ** 0.5
 
 
+class EarlyStopping:
+    """Early stopping to terminate training when validation loss stops improving.
+
+    Monitors validation loss and stops training after patience epochs
+    without improvement.
+    """
+
+    def __init__(
+        self,
+        patience: int = 10,
+        min_delta: float = 0.0,
+        mode: str = "min",
+    ):
+        """Initialize early stopping.
+
+        Args:
+            patience: Number of epochs to wait for improvement
+            min_delta: Minimum change to qualify as improvement
+            mode: "min" for loss (lower is better), "max" for accuracy
+        """
+        self.patience = patience
+        self.min_delta = min_delta
+        self.mode = mode
+        self.counter = 0
+        self.best_score = None
+        self.should_stop = False
+
+    def __call__(self, score: float) -> bool:
+        """Check if training should stop.
+
+        Args:
+            score: Current validation metric
+
+        Returns:
+            True if training should stop
+        """
+        if self.mode == "min":
+            current = -score
+        else:
+            current = score
+
+        if self.best_score is None:
+            self.best_score = current
+        elif current < self.best_score + self.min_delta:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.should_stop = True
+        else:
+            self.best_score = current
+            self.counter = 0
+
+        return self.should_stop
+
+    def reset(self):
+        """Reset early stopping state."""
+        self.counter = 0
+        self.best_score = None
+        self.should_stop = False
+
+
 class EMA:
     """Exponential Moving Average of model parameters.
 
