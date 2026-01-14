@@ -8,6 +8,9 @@ from .correlation import (
     symmetric_kl_divergence,
     magnetization_kl_divergence,
     energy_kl_divergence,
+    wasserstein_distance_1d,
+    magnetization_wasserstein,
+    energy_wasserstein,
 )
 
 __all__ = [
@@ -20,4 +23,7 @@ __all__ = [
     "symmetric_kl_divergence",
     "magnetization_kl_divergence",
     "energy_kl_divergence",
+    "wasserstein_distance_1d",
+    "magnetization_wasserstein",
+    "energy_wasserstein",
 ]

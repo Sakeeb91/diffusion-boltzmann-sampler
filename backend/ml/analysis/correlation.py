@@ -254,6 +254,90 @@ def energy_kl_divergence(
     }
 
 
+def wasserstein_distance_1d(
+    samples1: np.ndarray,
+    samples2: np.ndarray,
+) -> float:
+    """Compute 1D Wasserstein distance (Earth Mover's Distance).
+
+    Uses the efficient formula for 1D: W_1 = integral |F(x) - G(x)| dx
+    where F and G are the cumulative distribution functions.
+
+    Args:
+        samples1: First set of 1D samples
+        samples2: Second set of 1D samples
+
+    Returns:
+        Wasserstein-1 distance
+    """
+    samples1 = np.sort(np.asarray(samples1).flatten())
+    samples2 = np.sort(np.asarray(samples2).flatten())
+
+    # Combine and sort all unique values
+    all_values = np.sort(np.unique(np.concatenate([samples1, samples2])))
+
+    # Compute CDFs at each value
+    cdf1 = np.searchsorted(samples1, all_values, side="right") / len(samples1)
+    cdf2 = np.searchsorted(samples2, all_values, side="right") / len(samples2)
+
+    # Integrate |CDF1 - CDF2|
+    deltas = np.diff(np.concatenate([[all_values[0]], all_values]))
+    return float(np.sum(np.abs(cdf1 - cdf2) * deltas))
+
+
+def magnetization_wasserstein(
+    samples1: torch.Tensor,
+    samples2: torch.Tensor,
+) -> float:
+    """Compute Wasserstein distance between magnetization distributions.
+
+    Args:
+        samples1: First set of spin samples
+        samples2: Second set of spin samples
+
+    Returns:
+        Wasserstein-1 distance between magnetization distributions
+    """
+    # Compute magnetizations
+    if len(samples1.shape) == 4:
+        mag1 = samples1.mean(dim=(-1, -2, -3)).numpy()
+        mag2 = samples2.mean(dim=(-1, -2, -3)).numpy()
+    else:
+        mag1 = samples1.mean(dim=(-1, -2)).numpy()
+        mag2 = samples2.mean(dim=(-1, -2)).numpy()
+
+    return wasserstein_distance_1d(mag1, mag2)
+
+
+def energy_wasserstein(
+    samples1: torch.Tensor,
+    samples2: torch.Tensor,
+    ising_model,
+) -> float:
+    """Compute Wasserstein distance between energy distributions.
+
+    Args:
+        samples1: First set of spin samples
+        samples2: Second set of spin samples
+        ising_model: IsingModel instance
+
+    Returns:
+        Wasserstein-1 distance between energy distributions
+    """
+    # Handle channel dimension
+    if len(samples1.shape) == 4:
+        s1 = samples1.squeeze(1)
+        s2 = samples2.squeeze(1)
+    else:
+        s1, s2 = samples1, samples2
+
+    # Compute energies
+    e1 = ising_model.energy_per_spin(s1).numpy()
+    e2 = ising_model.energy_per_spin(s2).numpy()
+
+    return wasserstein_distance_1d(e1, e2)
+
+
 def compare_distributions(
     samples1: torch.Tensor,
     samples2: torch.Tensor,
