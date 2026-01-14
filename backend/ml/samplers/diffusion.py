@@ -469,6 +469,64 @@ class DiffusionSampler:
         # Remove channel dimension
         return samples.squeeze(1)
 
+    def generate_batch(
+        self,
+        n_samples: int,
+        lattice_size: int = 32,
+        temperature: float = 1.0,
+        batch_size: int = 16,
+        sampling_method: str = "sde",
+        discretize: bool = True,
+        progress_callback: Optional[callable] = None,
+    ) -> torch.Tensor:
+        """Generate multiple samples efficiently with batching.
+
+        Generates samples in smaller batches to manage memory, useful for
+        generating large numbers of samples.
+
+        Args:
+            n_samples: Total number of samples to generate
+            lattice_size: Size of square lattice
+            temperature: Sampling temperature
+            batch_size: Size of each generation batch (for memory efficiency)
+            sampling_method: "sde" (stochastic), "ode" (deterministic), or "pc" (predictor-corrector)
+            discretize: Whether to discretize to {-1, +1}
+            progress_callback: Optional callback(completed, total) for progress updates
+
+        Returns:
+            Tensor of shape (n_samples, lattice_size, lattice_size)
+        """
+        all_samples = []
+        n_generated = 0
+
+        while n_generated < n_samples:
+            current_batch = min(batch_size, n_samples - n_generated)
+            shape = (current_batch, 1, lattice_size, lattice_size)
+
+            # Generate batch using specified method
+            if sampling_method == "sde":
+                samples = self.sample(shape, temperature=temperature)
+            elif sampling_method == "ode":
+                samples = self.sample_ode(shape)
+            elif sampling_method == "pc":
+                samples = self.sample_predictor_corrector(shape, temperature=temperature)
+            else:
+                raise ValueError(f"Unknown sampling method: {sampling_method}")
+
+            # Discretize if requested
+            if discretize:
+                samples = self.discretize_spins(samples)
+
+            # Remove channel dimension and store
+            all_samples.append(samples.squeeze(1))
+            n_generated += current_batch
+
+            # Call progress callback if provided
+            if progress_callback:
+                progress_callback(n_generated, n_samples)
+
+        return torch.cat(all_samples, dim=0)
+
 
 class PretrainedDiffusionSampler(DiffusionSampler):
     """Diffusion sampler that can be used without a trained model.
