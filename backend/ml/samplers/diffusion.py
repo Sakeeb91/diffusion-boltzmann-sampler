@@ -1,7 +1,7 @@
 """Diffusion sampler using trained score network."""
 
 import torch
-from typing import Generator, Tuple, Optional
+from typing import Generator, Tuple, Optional, Dict, Any
 from ..models.diffusion import DiffusionProcess
 
 
@@ -128,6 +128,69 @@ class DiffusionSampler:
             # Yield intermediate states
             if i % yield_every == 0 or i == 1:
                 yield x.clone(), (i - 1) / self.num_steps
+
+    def discretize_spins(
+        self,
+        x: torch.Tensor,
+        method: str = "sign",
+    ) -> torch.Tensor:
+        """Convert continuous samples to discrete Ising spins {-1, +1}.
+
+        Args:
+            x: Continuous samples from diffusion (any shape)
+            method: Discretization method:
+                - "sign": Simple sign function threshold at 0
+                - "tanh": Soft discretization using tanh (preserves gradients)
+                - "gumbel": Gumbel-softmax for differentiable sampling
+
+        Returns:
+            Tensor of discrete spins in {-1, +1}
+        """
+        if method == "sign":
+            # Hard threshold at 0
+            return torch.sign(x)
+        elif method == "tanh":
+            # Soft discretization (temperature → 0 gives sign)
+            return torch.tanh(10.0 * x)
+        elif method == "gumbel":
+            # Gumbel-softmax for two classes {-1, +1}
+            logits = torch.stack([-x, x], dim=-1)
+            probs = torch.softmax(logits, dim=-1)
+            # Return expected value: P(+1) - P(-1)
+            return 2 * probs[..., 1] - 1
+        else:
+            raise ValueError(f"Unknown discretization method: {method}")
+
+    def sample_ising(
+        self,
+        batch_size: int = 1,
+        lattice_size: int = 32,
+        temperature: float = 1.0,
+        discretize: bool = True,
+        discretize_method: str = "sign",
+    ) -> torch.Tensor:
+        """Generate discrete Ising spin samples.
+
+        Convenience method for sampling Ising configurations.
+
+        Args:
+            batch_size: Number of samples to generate
+            lattice_size: Size of square lattice
+            temperature: Sampling temperature
+            discretize: Whether to discretize to {-1, +1}
+            discretize_method: Discretization method if discretize=True
+
+        Returns:
+            Tensor of shape (batch_size, lattice_size, lattice_size)
+        """
+        shape = (batch_size, 1, lattice_size, lattice_size)
+        samples = self.sample(shape, temperature=temperature)
+
+        if discretize:
+            samples = self.discretize_spins(samples, method=discretize_method)
+
+        # Remove channel dimension
+        return samples.squeeze(1)
 
 
 class PretrainedDiffusionSampler(DiffusionSampler):
