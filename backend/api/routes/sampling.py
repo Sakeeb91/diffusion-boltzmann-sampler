@@ -295,3 +295,106 @@ async def compare_samplers(request: CompareRequest) -> CompareResponse:
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class TrajectoryRequest(BaseModel):
+    """Request model for diffusion trajectory."""
+
+    lattice_size: int = Field(16, ge=8, le=64)
+    num_steps: int = Field(100, ge=20, le=500)
+    num_frames: int = Field(20, ge=5, le=100)
+    frame_spacing: str = Field(
+        "log", description="Frame spacing: linear, log, cosine"
+    )
+    checkpoint_path: Optional[str] = Field(None)
+
+
+class TrajectoryFrame(BaseModel):
+    """A single frame in a diffusion trajectory."""
+
+    step: int
+    time: float
+    spins: List[List[float]]
+    energy: float
+    magnetization: float
+
+
+class TrajectoryResponse(BaseModel):
+    """Response model for diffusion trajectory."""
+
+    lattice_size: int
+    num_steps: int
+    num_frames: int
+    frame_spacing: str
+    frames: List[TrajectoryFrame]
+
+
+@router.post("/trajectory", response_model=TrajectoryResponse)
+async def sample_trajectory(request: TrajectoryRequest) -> TrajectoryResponse:
+    """Generate a diffusion sampling trajectory with intermediate states.
+
+    Returns a sequence of frames showing the reverse diffusion process
+    from noise to a sample, useful for visualization and animation.
+    """
+    try:
+        from ...ml.samplers.diffusion import DiffusionSampler, PretrainedDiffusionSampler
+
+        # Create model for observables
+        model = IsingModel(size=request.lattice_size)
+
+        frames = []
+
+        if request.checkpoint_path:
+            # Use trained model with metadata trajectory
+            sampler = DiffusionSampler.from_checkpoint(
+                checkpoint_path=request.checkpoint_path,
+                num_steps=request.num_steps,
+            )
+            for step, time, state in sampler.sample_trajectory_with_metadata(
+                batch_size=1,
+                num_frames=request.num_frames,
+                frame_spacing=request.frame_spacing,
+            ):
+                # Remove batch and channel dimensions
+                spins = state.squeeze(0).squeeze(0)
+                frames.append(TrajectoryFrame(
+                    step=step,
+                    time=time,
+                    spins=spins.tolist(),
+                    energy=model.energy_per_spin(spins.unsqueeze(0)).item(),
+                    magnetization=model.magnetization(spins.unsqueeze(0)).item(),
+                ))
+        else:
+            # Use heuristic mode with basic trajectory
+            sampler = PretrainedDiffusionSampler(
+                lattice_size=request.lattice_size,
+                num_steps=request.num_steps,
+            )
+            trajectory = list(sampler.sample_trajectory(
+                batch_size=1,
+                yield_every=max(1, request.num_steps // request.num_frames),
+            ))
+
+            for i, state in enumerate(trajectory):
+                step = i * max(1, request.num_steps // request.num_frames)
+                time_val = 1.0 - step / request.num_steps
+                # Remove batch and channel dimensions
+                spins = state.squeeze(0).squeeze(0)
+                frames.append(TrajectoryFrame(
+                    step=step,
+                    time=time_val,
+                    spins=spins.tolist(),
+                    energy=model.energy_per_spin(spins.unsqueeze(0)).item(),
+                    magnetization=model.magnetization(spins.unsqueeze(0)).item(),
+                ))
+
+        return TrajectoryResponse(
+            lattice_size=request.lattice_size,
+            num_steps=request.num_steps,
+            num_frames=len(frames),
+            frame_spacing=request.frame_spacing,
+            frames=frames,
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
