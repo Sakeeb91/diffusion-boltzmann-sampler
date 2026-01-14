@@ -2,7 +2,7 @@
 
 import torch
 import numpy as np
-from typing import Dict, List
+from typing import Any, Dict, List
 
 
 def pair_correlation(samples: torch.Tensor) -> Dict[str, List[float]]:
