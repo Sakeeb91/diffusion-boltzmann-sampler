@@ -29,6 +29,18 @@ class DiffusionSampleRequest(BaseModel):
     lattice_size: int = Field(32, ge=8, le=64)
     n_samples: int = Field(1, ge=1, le=10)
     num_steps: int = Field(100, ge=10, le=500)
+    checkpoint_path: Optional[str] = Field(
+        None, description="Path to trained model checkpoint"
+    )
+    use_trained_model: bool = Field(
+        False, description="Whether to use trained model if available"
+    )
+    discretize: bool = Field(
+        True, description="Whether to discretize output to ±1 spins"
+    )
+    discretization_method: str = Field(
+        "sign", description="Method: sign, tanh, gumbel, stochastic"
+    )
 
 
 class SampleResponse(BaseModel):
@@ -80,21 +92,67 @@ async def sample_diffusion(request: DiffusionSampleRequest) -> SampleResponse:
     """Generate samples using diffusion model.
 
     Uses the trained score network for reverse diffusion sampling.
+    Supports loading trained model checkpoints for high-quality samples.
     """
     try:
-        from ...ml.samplers.diffusion import PretrainedDiffusionSampler
+        from ...ml.samplers.diffusion import DiffusionSampler, PretrainedDiffusionSampler
 
-        # Create sampler
-        sampler = PretrainedDiffusionSampler(
-            lattice_size=request.lattice_size,
-            num_steps=request.num_steps,
-        )
-
-        # Generate samples using heuristic (demo mode)
-        samples = sampler.sample_heuristic(
-            batch_size=request.n_samples,
-            temperature=request.temperature,
-        )
+        # Choose sampler based on request
+        if request.checkpoint_path:
+            # Load from explicit checkpoint path
+            sampler = DiffusionSampler.from_checkpoint(
+                checkpoint_path=request.checkpoint_path,
+                num_steps=request.num_steps,
+            )
+            # Generate samples with trained model
+            if request.discretize:
+                samples = sampler.sample_ising(
+                    batch_size=request.n_samples,
+                    method=request.discretization_method,
+                )
+            else:
+                samples = sampler.sample(batch_size=request.n_samples)
+        elif request.use_trained_model:
+            # Try to find a trained model automatically
+            import os
+            checkpoints_dir = os.path.join(
+                os.path.dirname(__file__), "..", "..", "ml", "checkpoints"
+            )
+            checkpoint_file = os.path.join(
+                checkpoints_dir, f"ising_{request.lattice_size}.pt"
+            )
+            if os.path.exists(checkpoint_file):
+                sampler = DiffusionSampler.from_checkpoint(
+                    checkpoint_path=checkpoint_file,
+                    num_steps=request.num_steps,
+                )
+                if request.discretize:
+                    samples = sampler.sample_ising(
+                        batch_size=request.n_samples,
+                        method=request.discretization_method,
+                    )
+                else:
+                    samples = sampler.sample(batch_size=request.n_samples)
+            else:
+                # Fall back to heuristic mode
+                sampler = PretrainedDiffusionSampler(
+                    lattice_size=request.lattice_size,
+                    num_steps=request.num_steps,
+                )
+                samples = sampler.sample_heuristic(
+                    batch_size=request.n_samples,
+                    temperature=request.temperature,
+                )
+        else:
+            # Use heuristic mode (demo/untrained)
+            sampler = PretrainedDiffusionSampler(
+                lattice_size=request.lattice_size,
+                num_steps=request.num_steps,
+            )
+            samples = sampler.sample_heuristic(
+                batch_size=request.n_samples,
+                temperature=request.temperature,
+            )
 
         # Remove channel dimension if present
         if len(samples.shape) == 4:
