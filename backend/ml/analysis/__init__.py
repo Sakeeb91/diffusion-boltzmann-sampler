@@ -11,6 +11,8 @@ from .correlation import (
     wasserstein_distance_1d,
     magnetization_wasserstein,
     energy_wasserstein,
+    correlation_function_comparison,
+    comprehensive_comparison,
 )
 
 __all__ = [
@@ -26,4 +28,6 @@ __all__ = [
     "wasserstein_distance_1d",
     "magnetization_wasserstein",
     "energy_wasserstein",
+    "correlation_function_comparison",
+    "comprehensive_comparison",
 ]

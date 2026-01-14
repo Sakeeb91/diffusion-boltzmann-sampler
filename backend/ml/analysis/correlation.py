@@ -338,6 +338,60 @@ def energy_wasserstein(
     return wasserstein_distance_1d(e1, e2)
 
 
+def correlation_function_comparison(
+    samples1: torch.Tensor,
+    samples2: torch.Tensor,
+) -> Dict[str, Any]:
+    """Compare pair correlation functions between sample sets.
+
+    Args:
+        samples1: First set of samples (e.g., MCMC)
+        samples2: Second set of samples (e.g., diffusion)
+
+    Returns:
+        Dictionary with:
+        - r: Distance values
+        - C1_r: Correlations for samples1
+        - C2_r: Correlations for samples2
+        - rmse: Root mean squared error between correlations
+        - max_diff: Maximum absolute difference
+        - correlation_length_ratio: Ratio of correlation lengths
+    """
+    corr1 = pair_correlation(samples1)
+    corr2 = pair_correlation(samples2)
+
+    c1 = np.array(corr1["C_r"])
+    c2 = np.array(corr2["C_r"])
+
+    # Compute comparison metrics
+    rmse = float(np.sqrt(np.mean((c1 - c2) ** 2)))
+    max_diff = float(np.max(np.abs(c1 - c2)))
+
+    # Estimate correlation length (distance where C(r) drops to 1/e)
+    threshold = 1.0 / np.e
+
+    def estimate_correlation_length(c):
+        for i, val in enumerate(c):
+            if val < threshold:
+                return i
+        return len(c)
+
+    xi1 = estimate_correlation_length(c1)
+    xi2 = estimate_correlation_length(c2)
+    xi_ratio = xi2 / xi1 if xi1 > 0 else float("inf")
+
+    return {
+        "r": corr1["r"],
+        "C1_r": corr1["C_r"],
+        "C2_r": corr2["C_r"],
+        "rmse": rmse,
+        "max_diff": max_diff,
+        "correlation_length_1": xi1,
+        "correlation_length_2": xi2,
+        "correlation_length_ratio": xi_ratio,
+    }
+
+
 def compare_distributions(
     samples1: torch.Tensor,
     samples2: torch.Tensor,
@@ -376,6 +430,64 @@ def compare_distributions(
         "samples2_mean_mag": m2.mean().item(),
         "samples1_var_mag": m1.var().item(),
         "samples2_var_mag": m2.var().item(),
+    }
+
+
+def comprehensive_comparison(
+    samples1: torch.Tensor,
+    samples2: torch.Tensor,
+    ising_model,
+    n_bins: int = 50,
+) -> Dict[str, Any]:
+    """Perform comprehensive comparison between two sample sets.
+
+    Combines all comparison metrics into a single report.
+
+    Args:
+        samples1: Reference samples (e.g., MCMC gold standard)
+        samples2: Test samples (e.g., diffusion model)
+        ising_model: IsingModel instance
+        n_bins: Number of histogram bins
+
+    Returns:
+        Dictionary with all comparison metrics organized by category
+    """
+    # Basic distribution comparison
+    basic = compare_distributions(samples1, samples2, ising_model)
+
+    # KL divergence
+    mag_kl = magnetization_kl_divergence(samples1, samples2, n_bins)
+    energy_kl = energy_kl_divergence(samples1, samples2, ising_model, n_bins)
+
+    # Wasserstein distance
+    mag_w = magnetization_wasserstein(samples1, samples2)
+    energy_w = energy_wasserstein(samples1, samples2, ising_model)
+
+    # Correlation functions
+    corr_comp = correlation_function_comparison(samples1, samples2)
+
+    return {
+        "basic_statistics": basic,
+        "kl_divergence": {
+            "magnetization": mag_kl,
+            "energy": energy_kl,
+        },
+        "wasserstein": {
+            "magnetization": mag_w,
+            "energy": energy_w,
+        },
+        "correlation": {
+            "rmse": corr_comp["rmse"],
+            "max_diff": corr_comp["max_diff"],
+            "correlation_length_ratio": corr_comp["correlation_length_ratio"],
+        },
+        "summary": {
+            "mag_kl": mag_kl["symmetric_kl_divergence"],
+            "energy_kl": energy_kl["symmetric_kl_divergence"],
+            "mag_wasserstein": mag_w,
+            "energy_wasserstein": energy_w,
+            "correlation_rmse": corr_comp["rmse"],
+        },
     }
 
 
