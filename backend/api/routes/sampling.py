@@ -152,3 +152,88 @@ async def get_ground_state(
         "magnetization": model.magnetization(spins.unsqueeze(0)).item(),
         "lattice_size": lattice_size,
     }
+
+
+class CompareRequest(BaseModel):
+    """Request model for comparing samplers."""
+
+    temperature: float = Field(2.27, ge=0.1, le=10.0)
+    lattice_size: int = Field(16, ge=8, le=64)
+    n_samples: int = Field(50, ge=10, le=200)
+    mcmc_sweeps: int = Field(20, ge=5, le=100)
+    mcmc_burn_in: int = Field(200, ge=50, le=1000)
+    diffusion_steps: int = Field(100, ge=50, le=500)
+
+
+class CompareResponse(BaseModel):
+    """Response model for sampler comparison."""
+
+    temperature: float
+    lattice_size: int
+    n_samples: int
+    summary: dict
+    basic_statistics: dict
+    kl_divergence: dict
+    wasserstein: dict
+    correlation: dict
+
+
+@router.post("/compare", response_model=CompareResponse)
+async def compare_samplers(request: CompareRequest) -> CompareResponse:
+    """Compare diffusion sampler against MCMC baseline.
+
+    Generates samples from both samplers and computes comprehensive
+    comparison metrics including KL divergence, Wasserstein distance,
+    and correlation function analysis.
+    """
+    try:
+        from ...ml.samplers.diffusion import PretrainedDiffusionSampler
+        from ...ml.analysis import comprehensive_comparison
+
+        # Create model and MCMC sampler
+        model = IsingModel(size=request.lattice_size)
+        mcmc_sampler = MetropolisHastings(model, temperature=request.temperature)
+
+        # Generate MCMC samples (reference)
+        mcmc_samples = mcmc_sampler.sample(
+            n_samples=request.n_samples,
+            n_sweeps=request.mcmc_sweeps,
+            burn_in=request.mcmc_burn_in,
+        )
+
+        # Generate diffusion samples
+        diffusion_sampler = PretrainedDiffusionSampler(
+            lattice_size=request.lattice_size,
+            num_steps=request.diffusion_steps,
+        )
+        diffusion_samples = diffusion_sampler.sample_heuristic(
+            batch_size=request.n_samples,
+            temperature=request.temperature,
+        )
+
+        # Remove channel dimension if present
+        if len(diffusion_samples.shape) == 4:
+            diffusion_samples = diffusion_samples.squeeze(1)
+
+        # Compute comprehensive comparison
+        comparison = comprehensive_comparison(
+            model=model,
+            samples_a=mcmc_samples,
+            samples_b=diffusion_samples,
+            name_a="MCMC",
+            name_b="Diffusion",
+        )
+
+        return CompareResponse(
+            temperature=request.temperature,
+            lattice_size=request.lattice_size,
+            n_samples=request.n_samples,
+            summary=comparison["summary"],
+            basic_statistics=comparison["basic_statistics"],
+            kl_divergence=comparison["kl_divergence"],
+            wasserstein=comparison["wasserstein"],
+            correlation=comparison["correlation"],
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
