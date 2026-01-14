@@ -133,31 +133,41 @@ class DiffusionSampler:
         self,
         x: torch.Tensor,
         method: str = "sign",
+        threshold: float = 0.0,
+        sharpness: float = 10.0,
     ) -> torch.Tensor:
         """Convert continuous samples to discrete Ising spins {-1, +1}.
 
         Args:
             x: Continuous samples from diffusion (any shape)
             method: Discretization method:
-                - "sign": Simple sign function threshold at 0
+                - "sign": Simple sign function threshold at threshold
                 - "tanh": Soft discretization using tanh (preserves gradients)
                 - "gumbel": Gumbel-softmax for differentiable sampling
+                - "stochastic": Probabilistic rounding based on value
+            threshold: Threshold value for sign method (default 0.0)
+            sharpness: Sharpness parameter for tanh method (higher = sharper)
 
         Returns:
             Tensor of discrete spins in {-1, +1}
         """
         if method == "sign":
-            # Hard threshold at 0
-            return torch.sign(x)
+            # Hard threshold at specified value
+            return torch.sign(x - threshold)
         elif method == "tanh":
-            # Soft discretization (temperature → 0 gives sign)
-            return torch.tanh(10.0 * x)
+            # Soft discretization (sharpness → ∞ gives sign)
+            return torch.tanh(sharpness * (x - threshold))
         elif method == "gumbel":
             # Gumbel-softmax for two classes {-1, +1}
-            logits = torch.stack([-x, x], dim=-1)
-            probs = torch.softmax(logits, dim=-1)
+            logits = torch.stack([-(x - threshold), x - threshold], dim=-1)
+            probs = torch.softmax(logits * sharpness, dim=-1)
             # Return expected value: P(+1) - P(-1)
             return 2 * probs[..., 1] - 1
+        elif method == "stochastic":
+            # Probabilistic discretization: P(+1) = sigmoid(sharpness * x)
+            probs = torch.sigmoid(sharpness * (x - threshold))
+            random_vals = torch.rand_like(probs)
+            return torch.where(random_vals < probs, torch.ones_like(x), -torch.ones_like(x))
         else:
             raise ValueError(f"Unknown discretization method: {method}")
 
