@@ -3,6 +3,8 @@
 from backend.ml.checkpoints import (
     format_checkpoint_name,
     format_epoch_checkpoint_name,
+    sanitize_checkpoint_name,
+    checkpoint_path_from_name,
 )
 
 
@@ -21,3 +23,16 @@ def test_format_epoch_checkpoint_name():
         timestamp="20240101_000000",
     )
     assert name == "ising_16_T1.50_epoch4_20240101_000000.pt"
+
+
+def test_sanitize_checkpoint_name():
+    """Checkpoint sanitizer should drop path components."""
+    assert sanitize_checkpoint_name("../../foo.pt") == "foo.pt"
+
+
+def test_checkpoint_path_from_name_uses_env(monkeypatch, tmp_path):
+    """Checkpoint path helper should use CHECKPOINT_DIR."""
+    monkeypatch.setenv("CHECKPOINT_DIR", str(tmp_path))
+    path = checkpoint_path_from_name("nested/foo.pt")
+    assert path.parent == tmp_path
+    assert path.name == "foo.pt"
