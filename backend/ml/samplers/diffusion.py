@@ -150,12 +150,14 @@ class DiffusionSampler:
         if "diffusion_config" in checkpoint:
             diffusion = DiffusionProcess(**checkpoint["diffusion_config"])
 
-        return cls(
+        sampler = cls(
             score_network=model,
             diffusion=diffusion,
             num_steps=num_steps,
             device=device,
         )
+        sampler.training_temperature = checkpoint.get("training_temperature")
+        return sampler
 
     def save_checkpoint(
         self,
