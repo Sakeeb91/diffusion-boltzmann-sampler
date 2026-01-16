@@ -197,10 +197,10 @@ class TestDiffusionSamplerODE:
         samples = diffusion_sampler.sample_ode(shape=(3, 1, 8, 8))
         assert samples.shape == (3, 1, 8, 8)
 
-    def test_sample_ode_different_solvers(self, diffusion_sampler):
-        """sample_ode should support different ODE solvers."""
-        for solver in ["euler", "heun", "rk4"]:
-            samples = diffusion_sampler.sample_ode(shape=(2, 1, 8, 8), solver=solver)
+    def test_sample_ode_different_methods(self, diffusion_sampler):
+        """sample_ode should support different ODE methods."""
+        for method in ["euler", "heun", "rk4"]:
+            samples = diffusion_sampler.sample_ode(shape=(2, 1, 8, 8), method=method)
             assert samples.shape == (2, 1, 8, 8)
 
 
