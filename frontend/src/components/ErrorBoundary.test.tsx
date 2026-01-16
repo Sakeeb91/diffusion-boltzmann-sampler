@@ -98,25 +98,30 @@ describe('ErrorBoundary', () => {
 
   describe('retry functionality', () => {
     it('should reset error state when Try Again is clicked', () => {
-      const { rerender } = render(
+      // Use a ref to control throwing behavior dynamically
+      let shouldThrow = true;
+      const DynamicThrow = () => {
+        if (shouldThrow) {
+          throw new Error('Test error');
+        }
+        return <div>Recovered content</div>;
+      };
+
+      render(
         <ErrorBoundary>
-          <ThrowingComponent shouldThrow={true} />
+          <DynamicThrow />
         </ErrorBoundary>
       );
 
       expect(screen.getByText('Something went wrong')).toBeInTheDocument();
 
-      // Click retry
+      // Change the throwing behavior before clicking retry
+      shouldThrow = false;
+
+      // Click retry - now the component won't throw
       fireEvent.click(screen.getByText('Try Again'));
 
-      // Re-render with non-throwing component
-      rerender(
-        <ErrorBoundary>
-          <ThrowingComponent shouldThrow={false} />
-        </ErrorBoundary>
-      );
-
-      expect(screen.getByText('Child content')).toBeInTheDocument();
+      expect(screen.getByText('Recovered content')).toBeInTheDocument();
       expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
     });
   });

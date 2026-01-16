@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { DiffusionAnimation } from './DiffusionAnimation';
 import { useSimulationStore } from '../store/simulationStore';
 
@@ -46,7 +46,8 @@ describe('DiffusionAnimation', () => {
 
     it('should show frame counter', () => {
       render(<DiffusionAnimation />);
-      expect(screen.getByText('Frame 3 / 3')).toBeInTheDocument();
+      // currentFrame defaults to 0, so Frame 1 / 3 is shown (1-indexed display)
+      expect(screen.getByText('Frame 1 / 3')).toBeInTheDocument();
     });
 
     it('should show scrubber slider', () => {

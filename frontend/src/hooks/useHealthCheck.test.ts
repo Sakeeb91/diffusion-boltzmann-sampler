@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { useHealthCheck } from './useHealthCheck';
 import * as api from '../services/api';
 
@@ -14,14 +14,12 @@ vi.mock('../services/api', () => ({
 
 const mockCheckHealth = vi.mocked(api.checkHealth);
 
+// Helper to flush promises
+const flushPromises = () => new Promise(resolve => setTimeout(resolve, 0));
+
 describe('useHealthCheck', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
     mockCheckHealth.mockClear();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   describe('initial state', () => {
@@ -43,9 +41,12 @@ describe('useHealthCheck', () => {
       mockCheckHealth.mockResolvedValue({ status: 'healthy' });
       renderHook(() => useHealthCheck());
 
-      await waitFor(() => {
-        expect(mockCheckHealth).toHaveBeenCalledTimes(1);
+      // Wait for the effect to run and the promise to resolve
+      await act(async () => {
+        await flushPromises();
       });
+
+      expect(mockCheckHealth).toHaveBeenCalledTimes(1);
     });
 
     it('should not check immediately when immediate is false', () => {
@@ -61,18 +62,22 @@ describe('useHealthCheck', () => {
       mockCheckHealth.mockResolvedValue({ status: 'healthy', version: '1.0.0' });
       const { result } = renderHook(() => useHealthCheck());
 
-      await waitFor(() => {
-        expect(result.current.isConnected).toBe(true);
+      await act(async () => {
+        await flushPromises();
       });
+
+      expect(result.current.isConnected).toBe(true);
     });
 
     it('should store version from response', async () => {
       mockCheckHealth.mockResolvedValue({ status: 'healthy', version: '2.0.0' });
       const { result } = renderHook(() => useHealthCheck());
 
-      await waitFor(() => {
-        expect(result.current.version).toBe('2.0.0');
+      await act(async () => {
+        await flushPromises();
       });
+
+      expect(result.current.version).toBe('2.0.0');
     });
 
     it('should store features from response', async () => {
@@ -80,18 +85,22 @@ describe('useHealthCheck', () => {
       mockCheckHealth.mockResolvedValue({ status: 'healthy', features });
       const { result } = renderHook(() => useHealthCheck());
 
-      await waitFor(() => {
-        expect(result.current.features).toEqual(features);
+      await act(async () => {
+        await flushPromises();
       });
+
+      expect(result.current.features).toEqual(features);
     });
 
     it('should update lastChecked timestamp', async () => {
       mockCheckHealth.mockResolvedValue({ status: 'healthy' });
       const { result } = renderHook(() => useHealthCheck());
 
-      await waitFor(() => {
-        expect(result.current.lastChecked).toBeInstanceOf(Date);
+      await act(async () => {
+        await flushPromises();
       });
+
+      expect(result.current.lastChecked).toBeInstanceOf(Date);
     });
 
     it('should clear error on success', async () => {
@@ -101,9 +110,12 @@ describe('useHealthCheck', () => {
 
       const { result } = renderHook(() => useHealthCheck());
 
-      await waitFor(() => {
-        expect(result.current.error).not.toBeNull();
+      // First call fails
+      await act(async () => {
+        await flushPromises();
       });
+
+      expect(result.current.error).not.toBeNull();
 
       // Trigger next check
       await act(async () => {
@@ -119,36 +131,44 @@ describe('useHealthCheck', () => {
       mockCheckHealth.mockRejectedValue(new Error('Network error'));
       const { result } = renderHook(() => useHealthCheck());
 
-      await waitFor(() => {
-        expect(result.current.isConnected).toBe(false);
+      await act(async () => {
+        await flushPromises();
       });
+
+      expect(result.current.isConnected).toBe(false);
     });
 
     it('should store error message', async () => {
       mockCheckHealth.mockRejectedValue(new Error('Connection refused'));
       const { result } = renderHook(() => useHealthCheck());
 
-      await waitFor(() => {
-        expect(result.current.error).toBe('Connection refused');
+      await act(async () => {
+        await flushPromises();
       });
+
+      expect(result.current.error).toBe('Connection refused');
     });
 
     it('should use default message for non-Error exceptions', async () => {
       mockCheckHealth.mockRejectedValue('Unknown error');
       const { result } = renderHook(() => useHealthCheck());
 
-      await waitFor(() => {
-        expect(result.current.error).toBe('Connection failed');
+      await act(async () => {
+        await flushPromises();
       });
+
+      expect(result.current.error).toBe('Connection failed');
     });
 
     it('should still update lastChecked on error', async () => {
       mockCheckHealth.mockRejectedValue(new Error('Error'));
       const { result } = renderHook(() => useHealthCheck());
 
-      await waitFor(() => {
-        expect(result.current.lastChecked).toBeInstanceOf(Date);
+      await act(async () => {
+        await flushPromises();
       });
+
+      expect(result.current.lastChecked).toBeInstanceOf(Date);
     });
   });
 
@@ -170,6 +190,7 @@ describe('useHealthCheck', () => {
       // Resolve the check
       await act(async () => {
         resolveCheck!({ status: 'healthy' });
+        await flushPromises();
       });
 
       expect(result.current.isChecking).toBe(false);
@@ -177,56 +198,64 @@ describe('useHealthCheck', () => {
   });
 
   describe('periodic checks', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should check periodically at specified interval', async () => {
       mockCheckHealth.mockResolvedValue({ status: 'healthy' });
       renderHook(() => useHealthCheck({ interval: 5000 }));
 
-      await waitFor(() => {
-        expect(mockCheckHealth).toHaveBeenCalledTimes(1);
+      // Initial check (called immediately)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
       });
+
+      expect(mockCheckHealth).toHaveBeenCalledTimes(1);
 
       // Advance timer by interval
       await act(async () => {
-        vi.advanceTimersByTime(5000);
+        await vi.advanceTimersByTimeAsync(5000);
       });
 
-      await waitFor(() => {
-        expect(mockCheckHealth).toHaveBeenCalledTimes(2);
-      });
+      expect(mockCheckHealth).toHaveBeenCalledTimes(2);
 
       // Advance again
       await act(async () => {
-        vi.advanceTimersByTime(5000);
+        await vi.advanceTimersByTimeAsync(5000);
       });
 
-      await waitFor(() => {
-        expect(mockCheckHealth).toHaveBeenCalledTimes(3);
-      });
+      expect(mockCheckHealth).toHaveBeenCalledTimes(3);
     });
 
     it('should use default interval of 10000ms', async () => {
       mockCheckHealth.mockResolvedValue({ status: 'healthy' });
       renderHook(() => useHealthCheck());
 
-      await waitFor(() => {
-        expect(mockCheckHealth).toHaveBeenCalledTimes(1);
+      // Initial check
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
       });
+
+      expect(mockCheckHealth).toHaveBeenCalledTimes(1);
 
       // Advance by less than default interval
       await act(async () => {
-        vi.advanceTimersByTime(9000);
+        await vi.advanceTimersByTimeAsync(9000);
       });
 
       expect(mockCheckHealth).toHaveBeenCalledTimes(1);
 
       // Advance to complete interval
       await act(async () => {
-        vi.advanceTimersByTime(1000);
+        await vi.advanceTimersByTimeAsync(1000);
       });
 
-      await waitFor(() => {
-        expect(mockCheckHealth).toHaveBeenCalledTimes(2);
-      });
+      expect(mockCheckHealth).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -237,9 +266,11 @@ describe('useHealthCheck', () => {
 
       renderHook(() => useHealthCheck({ onStatusChange }));
 
-      await waitFor(() => {
-        expect(onStatusChange).toHaveBeenCalledWith(true);
+      await act(async () => {
+        await flushPromises();
       });
+
+      expect(onStatusChange).toHaveBeenCalledWith(true);
     });
 
     it('should call onStatusChange when connection lost', async () => {
@@ -248,32 +279,38 @@ describe('useHealthCheck', () => {
 
       renderHook(() => useHealthCheck({ onStatusChange }));
 
-      await waitFor(() => {
-        expect(onStatusChange).toHaveBeenCalledWith(false);
+      await act(async () => {
+        await flushPromises();
       });
+
+      expect(onStatusChange).toHaveBeenCalledWith(false);
     });
 
     it('should only call onStatusChange when status changes', async () => {
+      vi.useFakeTimers();
       const onStatusChange = vi.fn();
       mockCheckHealth.mockResolvedValue({ status: 'healthy' });
 
-      const { result } = renderHook(() => useHealthCheck({ onStatusChange, interval: 1000 }));
+      renderHook(() => useHealthCheck({ onStatusChange, interval: 1000 }));
 
-      await waitFor(() => {
-        expect(onStatusChange).toHaveBeenCalledTimes(1);
+      // Initial check
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
       });
+
+      expect(onStatusChange).toHaveBeenCalledTimes(1);
 
       // Trigger another check with same status
       await act(async () => {
-        vi.advanceTimersByTime(1000);
+        await vi.advanceTimersByTimeAsync(1000);
       });
 
-      await waitFor(() => {
-        expect(mockCheckHealth).toHaveBeenCalledTimes(2);
-      });
+      expect(mockCheckHealth).toHaveBeenCalledTimes(2);
 
       // Should not call again since status didn't change
       expect(onStatusChange).toHaveBeenCalledTimes(1);
+
+      vi.useRealTimers();
     });
   });
 
@@ -300,19 +337,30 @@ describe('useHealthCheck', () => {
   });
 
   describe('cleanup', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should clear interval on unmount', async () => {
       mockCheckHealth.mockResolvedValue({ status: 'healthy' });
       const { unmount } = renderHook(() => useHealthCheck({ interval: 5000 }));
 
-      await waitFor(() => {
-        expect(mockCheckHealth).toHaveBeenCalledTimes(1);
+      // Initial check
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
       });
+
+      expect(mockCheckHealth).toHaveBeenCalledTimes(1);
 
       unmount();
 
       // Advance timer - should not trigger more checks
       await act(async () => {
-        vi.advanceTimersByTime(10000);
+        await vi.advanceTimersByTimeAsync(10000);
       });
 
       expect(mockCheckHealth).toHaveBeenCalledTimes(1);

@@ -63,8 +63,10 @@ describe('ControlPanel', () => {
 
     it('should update temperature when slider changes', () => {
       render(<ControlPanel onSample={mockOnSample} onRandomize={mockOnRandomize} />);
-      const slider = screen.getByRole('slider', { name: /temperature/i });
-      fireEvent.change(slider, { target: { value: '3.5' } });
+      // Get the first slider (temperature) - no accessible name on range inputs
+      const sliders = screen.getAllByRole('slider');
+      const temperatureSlider = sliders[0];
+      fireEvent.change(temperatureSlider, { target: { value: '3.5' } });
       expect(useSimulationStore.getState().temperature).toBe(3.5);
     });
 
