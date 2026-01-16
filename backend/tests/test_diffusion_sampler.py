@@ -405,6 +405,60 @@ class TestDiffusionSamplerGenerateBatch:
             assert samples.shape == (2, 8, 8)
 
 
+class TestDiffusionSamplerODEReproducibility:
+    """Tests for deterministic ODE sampling reproducibility."""
+
+    @pytest.fixture
+    def diffusion_sampler(self):
+        """Create a diffusion sampler for testing."""
+        model = ScoreNetwork(in_channels=1, base_channels=16, time_embed_dim=32, num_blocks=2)
+        return DiffusionSampler(
+            score_network=model,
+            num_steps=10,
+        )
+
+    def test_ode_euler_reproducibility(self, diffusion_sampler):
+        """ODE euler method should produce identical results with same seed."""
+        torch.manual_seed(42)
+        samples1 = diffusion_sampler.sample_ode(shape=(2, 1, 8, 8), method="euler")
+
+        torch.manual_seed(42)
+        samples2 = diffusion_sampler.sample_ode(shape=(2, 1, 8, 8), method="euler")
+
+        assert torch.allclose(samples1, samples2, atol=1e-6)
+
+    def test_ode_heun_reproducibility(self, diffusion_sampler):
+        """ODE heun method should produce identical results with same seed."""
+        torch.manual_seed(123)
+        samples1 = diffusion_sampler.sample_ode(shape=(2, 1, 8, 8), method="heun")
+
+        torch.manual_seed(123)
+        samples2 = diffusion_sampler.sample_ode(shape=(2, 1, 8, 8), method="heun")
+
+        assert torch.allclose(samples1, samples2, atol=1e-6)
+
+    def test_ode_rk4_reproducibility(self, diffusion_sampler):
+        """ODE rk4 method should produce identical results with same seed."""
+        torch.manual_seed(456)
+        samples1 = diffusion_sampler.sample_ode(shape=(2, 1, 8, 8), method="rk4")
+
+        torch.manual_seed(456)
+        samples2 = diffusion_sampler.sample_ode(shape=(2, 1, 8, 8), method="rk4")
+
+        assert torch.allclose(samples1, samples2, atol=1e-6)
+
+    def test_ode_different_seeds_produce_different_samples(self, diffusion_sampler):
+        """Different seeds should produce different ODE samples."""
+        torch.manual_seed(1)
+        samples1 = diffusion_sampler.sample_ode(shape=(2, 1, 8, 8), method="euler")
+
+        torch.manual_seed(2)
+        samples2 = diffusion_sampler.sample_ode(shape=(2, 1, 8, 8), method="euler")
+
+        # Should not be identical
+        assert not torch.allclose(samples1, samples2, atol=1e-6)
+
+
 class TestDiffusionSamplerCheckpoint:
     """Tests for checkpoint save/load functionality."""
 
