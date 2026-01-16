@@ -12,6 +12,7 @@ from ...ml.checkpoints import (
     get_checkpoint_dir,
     format_checkpoint_name,
     find_latest_checkpoint,
+    checkpoint_path_from_name,
 )
 
 
@@ -68,8 +69,7 @@ def resolve_checkpoint_path(request: DiffusionSampleRequest) -> Optional[Path]:
         return Path(request.checkpoint_path)
 
     if request.checkpoint_name:
-        checkpoint_name = Path(request.checkpoint_name).name
-        return get_checkpoint_dir() / checkpoint_name
+        return checkpoint_path_from_name(request.checkpoint_name)
 
     if not request.use_trained_model:
         return None
