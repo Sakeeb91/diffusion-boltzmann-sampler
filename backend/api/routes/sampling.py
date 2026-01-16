@@ -275,18 +275,21 @@ async def compare_samplers(request: CompareRequest) -> CompareResponse:
 
         # Compute comprehensive comparison
         comparison = comprehensive_comparison(
-            model=model,
-            samples_a=mcmc_samples,
-            samples_b=diffusion_samples,
-            name_a="MCMC",
-            name_b="Diffusion",
+            samples1=mcmc_samples,
+            samples2=diffusion_samples,
+            ising_model=model,
         )
+
+        # Add sampler names to summary
+        summary = comparison["summary"]
+        summary["name_a"] = "MCMC"
+        summary["name_b"] = "Diffusion"
 
         return CompareResponse(
             temperature=request.temperature,
             lattice_size=request.lattice_size,
             n_samples=request.n_samples,
-            summary=comparison["summary"],
+            summary=summary,
             basic_statistics=comparison["basic_statistics"],
             kl_divergence=comparison["kl_divergence"],
             wasserstein=comparison["wasserstein"],
@@ -370,14 +373,15 @@ async def sample_trajectory(request: TrajectoryRequest) -> TrajectoryResponse:
                 lattice_size=request.lattice_size,
                 num_steps=request.num_steps,
             )
-            trajectory = list(sampler.sample_trajectory(
-                batch_size=1,
-                yield_every=max(1, request.num_steps // request.num_frames),
+            shape = (1, 1, request.lattice_size, request.lattice_size)
+            yield_every = max(1, request.num_steps // request.num_frames)
+            trajectory = list(sampler.sample_with_trajectory(
+                shape=shape,
+                yield_every=yield_every,
             ))
 
-            for i, state in enumerate(trajectory):
-                step = i * max(1, request.num_steps // request.num_frames)
-                time_val = 1.0 - step / request.num_steps
+            for i, (state, time_val) in enumerate(trajectory):
+                step = i * yield_every
                 # Remove batch and channel dimensions
                 spins = state.squeeze(0).squeeze(0)
                 frames.append(TrajectoryFrame(
