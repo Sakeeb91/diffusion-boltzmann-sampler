@@ -304,6 +304,64 @@ class TestDiffusionSamplerTemperatureScaling:
         assert samples.shape == (2, 1, 8, 8)
 
 
+class TestDiffusionSamplerTrajectoryWithMetadata:
+    """Tests for sample_trajectory_with_metadata method."""
+
+    @pytest.fixture
+    def diffusion_sampler(self):
+        """Create a diffusion sampler for testing."""
+        model = ScoreNetwork(in_channels=1, base_channels=16, time_embed_dim=32, num_blocks=2)
+        return DiffusionSampler(
+            score_network=model,
+            num_steps=20,
+        )
+
+    def test_metadata_trajectory_is_generator(self, diffusion_sampler):
+        """sample_trajectory_with_metadata should return a generator."""
+        from types import GeneratorType
+        trajectory = diffusion_sampler.sample_trajectory_with_metadata(
+            shape=(1, 1, 8, 8), n_frames=5
+        )
+        assert isinstance(trajectory, GeneratorType)
+
+    def test_metadata_trajectory_yields_dicts(self, diffusion_sampler):
+        """Trajectory should yield dictionaries with metadata."""
+        for frame in diffusion_sampler.sample_trajectory_with_metadata(
+            shape=(1, 1, 8, 8), n_frames=3
+        ):
+            assert isinstance(frame, dict)
+            assert "x" in frame
+            assert "t" in frame
+            assert "step" in frame
+            assert "progress" in frame
+            assert "sigma" in frame
+            break
+
+    def test_metadata_trajectory_frame_spacing_linear(self, diffusion_sampler):
+        """Linear spacing should yield evenly spaced frames."""
+        frames = list(diffusion_sampler.sample_trajectory_with_metadata(
+            shape=(1, 1, 8, 8), n_frames=5, frame_spacing="linear"
+        ))
+        assert len(frames) > 0
+        # Progress should increase monotonically
+        progress_values = [f["progress"] for f in frames]
+        assert progress_values[0] <= progress_values[-1]
+
+    def test_metadata_trajectory_frame_spacing_log(self, diffusion_sampler):
+        """Log spacing should yield more frames near the end."""
+        frames = list(diffusion_sampler.sample_trajectory_with_metadata(
+            shape=(1, 1, 8, 8), n_frames=5, frame_spacing="log"
+        ))
+        assert len(frames) > 0
+
+    def test_metadata_trajectory_frame_spacing_cosine(self, diffusion_sampler):
+        """Cosine spacing should yield smooth acceleration."""
+        frames = list(diffusion_sampler.sample_trajectory_with_metadata(
+            shape=(1, 1, 8, 8), n_frames=5, frame_spacing="cosine"
+        ))
+        assert len(frames) > 0
+
+
 class TestDiffusionSamplerGenerateBatch:
     """Tests for generate_batch method."""
 
