@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -27,6 +27,10 @@ class CheckpointMetadata:
     model_config: Optional[Dict[str, Any]] = None
     diffusion_config: Optional[Dict[str, Any]] = None
     training_meta: Optional[Dict[str, Any]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return a JSON-serializable representation."""
+        return asdict(self)
 
 
 def get_checkpoint_dir() -> Path:

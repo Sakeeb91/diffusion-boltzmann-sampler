@@ -261,7 +261,7 @@ async def list_checkpoints() -> List[CheckpointInfo]:
     Returns list of checkpoint files in the checkpoints directory.
     """
     return [
-        CheckpointInfo(**checkpoint.__dict__)
+        CheckpointInfo(**checkpoint.to_dict())
         for checkpoint in list_checkpoint_metadata()
     ]
 
@@ -279,7 +279,7 @@ async def get_latest_checkpoint(
     if latest is None:
         raise HTTPException(status_code=404, detail="No matching checkpoints found")
 
-    return CheckpointInfo(**latest.__dict__)
+    return CheckpointInfo(**latest.to_dict())
 
 
 class LoadCheckpointRequest(BaseModel):
