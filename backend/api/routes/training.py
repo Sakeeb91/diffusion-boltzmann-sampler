@@ -1,16 +1,13 @@
 """Training API routes."""
 
-import os
-from pathlib import Path
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
+from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-# Default checkpoint directory
-CHECKPOINT_DIR = Path("checkpoints")
-CHECKPOINT_DIR.mkdir(exist_ok=True)
+from ...ml.checkpoints import get_checkpoint_dir, list_checkpoints as list_checkpoint_metadata
 
 from ...ml.systems.ising import IsingModel
 from ...ml.models.score_network import ScoreNetwork
@@ -181,6 +178,11 @@ class CheckpointInfo(BaseModel):
     path: str
     size_bytes: int
     modified_time: str
+    lattice_size: Optional[int] = None
+    training_temperature: Optional[float] = None
+    model_config: Optional[Dict[str, Any]] = None
+    diffusion_config: Optional[Dict[str, Any]] = None
+    training_meta: Optional[Dict[str, Any]] = None
 
 
 @router.get("/checkpoints", response_model=List[CheckpointInfo])
@@ -189,23 +191,10 @@ async def list_checkpoints() -> List[CheckpointInfo]:
 
     Returns list of checkpoint files in the checkpoints directory.
     """
-    checkpoints = []
-
-    if CHECKPOINT_DIR.exists():
-        for file in CHECKPOINT_DIR.glob("*.pt"):
-            stat = file.stat()
-            checkpoints.append(
-                CheckpointInfo(
-                    name=file.name,
-                    path=str(file),
-                    size_bytes=stat.st_size,
-                    modified_time=str(stat.st_mtime),
-                )
-            )
-
-    # Sort by modification time (newest first)
-    checkpoints.sort(key=lambda x: x.modified_time, reverse=True)
-    return checkpoints
+    return [
+        CheckpointInfo(**checkpoint.__dict__)
+        for checkpoint in list_checkpoint_metadata()
+    ]
 
 
 class LoadCheckpointRequest(BaseModel):
@@ -228,7 +217,9 @@ async def load_checkpoint(request: LoadCheckpointRequest) -> LoadCheckpointRespo
 
     Loads model weights and training history from a checkpoint file.
     """
-    checkpoint_path = CHECKPOINT_DIR / request.checkpoint_name
+    checkpoint_dir = get_checkpoint_dir()
+    checkpoint_name = Path(request.checkpoint_name).name
+    checkpoint_path = checkpoint_dir / checkpoint_name
 
     if not checkpoint_path.exists():
         raise HTTPException(
