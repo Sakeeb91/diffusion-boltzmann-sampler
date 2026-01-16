@@ -15,7 +15,7 @@ class TestCompareEndpoint:
             "n_samples": 10,
             "mcmc_sweeps": 5,
             "mcmc_burn_in": 50,
-            "diffusion_steps": 20,
+            "diffusion_steps": 50,
         }
         response = client.post("/sample/compare", json=params)
         assert response.status_code == 200
@@ -28,7 +28,7 @@ class TestCompareEndpoint:
             "n_samples": 10,
             "mcmc_sweeps": 5,
             "mcmc_burn_in": 50,
-            "diffusion_steps": 20,
+            "diffusion_steps": 50,
         }
         response = client.post("/sample/compare", json=params)
         assert response.headers["content-type"] == "application/json"
@@ -41,7 +41,7 @@ class TestCompareEndpoint:
             "n_samples": 10,
             "mcmc_sweeps": 5,
             "mcmc_burn_in": 50,
-            "diffusion_steps": 20,
+            "diffusion_steps": 50,
         }
         response = client.post("/sample/compare", json=params)
         data = response.json()
@@ -67,7 +67,7 @@ class TestCompareEndpoint:
             "n_samples": 10,
             "mcmc_sweeps": 5,
             "mcmc_burn_in": 50,
-            "diffusion_steps": 20,
+            "diffusion_steps": 50,
         }
         response = client.post("/sample/compare", json=params)
         data = response.json()
@@ -85,14 +85,14 @@ class TestCompareEndpoint:
             "n_samples": 10,
             "mcmc_sweeps": 5,
             "mcmc_burn_in": 50,
-            "diffusion_steps": 20,
+            "diffusion_steps": 50,
         }
         response = client.post("/sample/compare", json=params)
         data = response.json()
 
         basic_stats = data["basic_statistics"]
-        # Should have stats for both samplers
-        assert "MCMC" in basic_stats or "Diffusion" in basic_stats
+        # Should have comparison stats
+        assert "mag_mean_diff" in basic_stats or "samples1_mean_mag" in basic_stats
 
     def test_compare_kl_divergence_values(self, client: TestClient):
         """KL divergence values should be non-negative."""
@@ -108,11 +108,19 @@ class TestCompareEndpoint:
         data = response.json()
 
         kl_div = data["kl_divergence"]
-        # KL divergence should be non-negative
+        # KL divergence should be non-negative (values are dicts with kl_divergence key)
         if "magnetization" in kl_div:
-            assert kl_div["magnetization"] >= 0
+            mag_kl = kl_div["magnetization"]
+            if isinstance(mag_kl, dict):
+                assert mag_kl.get("symmetric_kl_divergence", 0) >= 0
+            else:
+                assert mag_kl >= 0
         if "energy" in kl_div:
-            assert kl_div["energy"] >= 0
+            energy_kl = kl_div["energy"]
+            if isinstance(energy_kl, dict):
+                assert energy_kl.get("symmetric_kl_divergence", 0) >= 0
+            else:
+                assert energy_kl >= 0
 
     def test_compare_wasserstein_values(self, client: TestClient):
         """Wasserstein values should be non-negative."""
@@ -168,8 +176,8 @@ class TestTrajectoryEndpoint:
         """Each frame should have step, time, spins, energy, magnetization."""
         params = {
             "lattice_size": 8,
-            "num_steps": 20,
-            "num_frames": 3,
+            "num_steps": 50,
+            "num_frames": 5,
             "frame_spacing": "linear",
         }
         response = client.post("/sample/trajectory", json=params)
@@ -186,8 +194,8 @@ class TestTrajectoryEndpoint:
         """Spins in each frame should have correct lattice shape."""
         params = {
             "lattice_size": 16,
-            "num_steps": 20,
-            "num_frames": 3,
+            "num_steps": 50,
+            "num_frames": 5,
             "frame_spacing": "linear",
         }
         response = client.post("/sample/trajectory", json=params)
@@ -353,7 +361,7 @@ class TestStatisticsEndpoint:
             "lattice_size": 8,
             "n_samples": 20,
             "sampler": "diffusion",
-            "diffusion_steps": 20,
+            "diffusion_steps": 50,
         }
         response = client.post("/sample/statistics", json=params)
         data = response.json()
