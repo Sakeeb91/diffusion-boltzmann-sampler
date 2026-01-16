@@ -146,6 +146,13 @@ npm run dev
 
 Visit `http://localhost:5173` for the interactive interface.
 
+## Checkpointing
+
+- Training saves model checkpoints to `CHECKPOINT_DIR` (default: `checkpoints/`)
+- Set `CHECKPOINT_DIR=/path/to/dir` to override the location
+- Use `/training/checkpoints` or `/training/checkpoints/latest` to discover checkpoints
+- Pass `checkpoint_name` or `use_trained_model=true` to `/sample/diffusion`
+
 ## Features
 
 ### Interactive Visualizations
