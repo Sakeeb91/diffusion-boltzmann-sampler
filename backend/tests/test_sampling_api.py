@@ -406,3 +406,54 @@ class TestEndToEndMCMCSampling:
         # At very low T, energies should be close to ground state
         for energy in sample_data["energies"]:
             assert energy < gs_energy + 0.5, f"Energy too high: {energy} vs gs {gs_energy}"
+
+
+class TestDiffusionCheckpointSampling:
+    """Tests for loading diffusion checkpoints via API."""
+
+    def test_diffusion_uses_checkpoint_name(self, client: TestClient, monkeypatch, tmp_path):
+        """Sampling should load the specified checkpoint."""
+        monkeypatch.setenv("CHECKPOINT_DIR", str(tmp_path))
+
+        from backend.ml.models.score_network import ScoreNetwork
+        from backend.ml.models.diffusion import DiffusionProcess
+        from backend.ml.samplers.diffusion import DiffusionSampler
+        from backend.ml.checkpoints import format_checkpoint_name
+
+        model_config = {
+            "in_channels": 1,
+            "base_channels": 8,
+            "time_embed_dim": 16,
+            "num_blocks": 1,
+        }
+        model = ScoreNetwork(**model_config)
+        sampler = DiffusionSampler(
+            score_network=model,
+            diffusion=DiffusionProcess(beta_min=0.1, beta_max=1.0),
+            num_steps=5,
+        )
+
+        checkpoint_path = tmp_path / format_checkpoint_name(8, 2.27)
+        sampler.save_checkpoint(
+            path=str(checkpoint_path),
+            model_config=model_config,
+            training_temperature=2.27,
+            extra_info={"lattice_size": 8},
+        )
+
+        response = client.post(
+            "/sample/diffusion",
+            json={
+                "temperature": 2.27,
+                "lattice_size": 8,
+                "n_samples": 1,
+                "num_steps": 5,
+                "checkpoint_name": checkpoint_path.name,
+                "discretize": True,
+                "discretization_method": "sign",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["lattice_size"] == 8
+        assert len(data["samples"]) == 1
