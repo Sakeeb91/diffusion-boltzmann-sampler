@@ -3,7 +3,6 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
-from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -13,6 +12,7 @@ from ...ml.checkpoints import (
     format_checkpoint_name,
     format_epoch_checkpoint_name,
     find_latest_checkpoint,
+    checkpoint_path_from_name,
 )
 
 from ...ml.systems.ising import IsingModel
@@ -296,9 +296,7 @@ async def load_checkpoint(request: LoadCheckpointRequest) -> LoadCheckpointRespo
 
     Loads model weights and training history from a checkpoint file.
     """
-    checkpoint_dir = get_checkpoint_dir()
-    checkpoint_name = Path(request.checkpoint_name).name
-    checkpoint_path = checkpoint_dir / checkpoint_name
+    checkpoint_path = checkpoint_path_from_name(request.checkpoint_name)
 
     if not checkpoint_path.exists():
         raise HTTPException(
