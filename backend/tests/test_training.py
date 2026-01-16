@@ -294,6 +294,33 @@ class TestTrainerCheckpointing:
             assert os.path.exists(f.name)
             os.unlink(f.name)
 
+    def test_checkpoint_includes_metadata(self, trainer, sample_dataloader):
+        """Checkpoint includes configuration metadata."""
+        trainer.train_epoch(sample_dataloader)
+
+        model_config = {
+            "in_channels": 1,
+            "base_channels": 8,
+            "time_embed_dim": 16,
+            "num_blocks": 1,
+        }
+
+        with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
+            trainer.save_checkpoint(
+                f.name,
+                model_config=model_config,
+                training_temperature=2.5,
+                training_meta={"epochs": 1},
+                extra_info={"lattice_size": 8},
+            )
+            checkpoint = torch.load(f.name)
+            assert checkpoint["model_config"]["in_channels"] == 1
+            assert checkpoint["training_temperature"] == 2.5
+            assert "diffusion_config" in checkpoint
+            assert checkpoint["training_meta"]["epochs"] == 1
+            assert checkpoint["lattice_size"] == 8
+            os.unlink(f.name)
+
     def test_load_checkpoint(self, small_score_network, diffusion, sample_dataloader):
         """Trainer can load checkpoint."""
         # Create and train first trainer
