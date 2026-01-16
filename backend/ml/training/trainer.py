@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import _LRScheduler, CosineAnnealingLR, StepLR
 from torch.utils.data import DataLoader, TensorDataset
-from typing import Optional, Callable, Dict, List, Union, Literal
+from typing import Optional, Callable, Dict, List, Union, Literal, Any
 from tqdm import tqdm
 
 from ..models.score_network import ScoreNetwork
@@ -375,20 +375,42 @@ class Trainer:
 
         return self.history
 
-    def save_checkpoint(self, path: str):
+    def save_checkpoint(
+        self,
+        path: str,
+        model_config: Optional[Dict[str, Any]] = None,
+        diffusion_config: Optional[Dict[str, Any]] = None,
+        training_temperature: Optional[float] = None,
+        training_meta: Optional[Dict[str, Any]] = None,
+        extra_info: Optional[Dict[str, Any]] = None,
+    ):
         """Save model checkpoint.
 
         Args:
             path: Path to save checkpoint
+            model_config: Optional model configuration
+            diffusion_config: Optional diffusion configuration
+            training_temperature: Optional training temperature
+            training_meta: Optional training metadata (epochs, samples, etc.)
+            extra_info: Optional extra information to save
         """
-        torch.save(
-            {
-                "model_state_dict": self.model.state_dict(),
-                "optimizer_state_dict": self.optimizer.state_dict(),
-                "history": self.history,
-            },
-            path,
-        )
+        checkpoint = {
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "history": self.history,
+            "diffusion_config": diffusion_config or self.diffusion.get_config(),
+        }
+
+        if model_config:
+            checkpoint["model_config"] = model_config
+        if training_temperature is not None:
+            checkpoint["training_temperature"] = training_temperature
+        if training_meta:
+            checkpoint["training_meta"] = training_meta
+        if extra_info:
+            checkpoint.update(extra_info)
+
+        torch.save(checkpoint, path)
 
     def load_checkpoint(self, path: str):
         """Load model checkpoint.
