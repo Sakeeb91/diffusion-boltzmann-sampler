@@ -1,4 +1,14 @@
-const API_BASE = 'http://localhost:8000';
+import { APIError, TimeoutError, NetworkError, WebSocketError, ErrorCode } from '../utils/errors';
+import { env } from '../config/env';
+
+const API_BASE = env.apiBaseUrl;
+const WS_BASE = env.wsBaseUrl;
+
+/** Default timeout for API requests in milliseconds */
+const DEFAULT_TIMEOUT = 30000;
+
+/** Timeout for long-running operations like sampling */
+const SAMPLING_TIMEOUT = 120000;
 
 export interface SampleResponse {
   samples: number[][][];
@@ -44,15 +54,61 @@ export interface HealthResponse {
   features?: Record<string, boolean>;
 }
 
-export async function checkHealth(): Promise<HealthResponse> {
-  const response = await fetch(`${API_BASE}/health`);
-  if (!response.ok) throw new Error('Backend not available');
+/**
+ * Fetch with timeout support.
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = DEFAULT_TIMEOUT
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new TimeoutError(`Request timed out after ${timeoutMs}ms`, timeoutMs);
+    }
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new NetworkError('Network request failed. Is the backend running?');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Handle API response and throw appropriate errors.
+ */
+async function handleResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    let message = `HTTP ${response.status}: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      message = errorData.detail || errorData.message || message;
+    } catch {
+      // Use default message if JSON parsing fails
+    }
+    throw new APIError(message, response.status);
+  }
   return response.json();
 }
 
-export async function getConfig(): Promise<Record<string, any>> {
-  const response = await fetch(`${API_BASE}/config`);
-  return response.json();
+export async function checkHealth(): Promise<HealthResponse> {
+  const response = await fetchWithTimeout(`${API_BASE}/health`, {}, 5000);
+  return handleResponse<HealthResponse>(response);
+}
+
+export async function getConfig(): Promise<Record<string, unknown>> {
+  const response = await fetchWithTimeout(`${API_BASE}/config`);
+  return handleResponse<Record<string, unknown>>(response);
 }
 
 export async function sampleMCMC(params: {
@@ -62,13 +118,16 @@ export async function sampleMCMC(params: {
   n_sweeps?: number;
   burn_in?: number;
 }): Promise<SampleResponse> {
-  const response = await fetch(`${API_BASE}/sample/mcmc`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
-  if (!response.ok) throw new Error('Sampling failed');
-  return response.json();
+  const response = await fetchWithTimeout(
+    `${API_BASE}/sample/mcmc`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    },
+    SAMPLING_TIMEOUT
+  );
+  return handleResponse<SampleResponse>(response);
 }
 
 export async function sampleDiffusion(params: {
@@ -77,13 +136,16 @@ export async function sampleDiffusion(params: {
   n_samples: number;
   num_steps?: number;
 }): Promise<SampleResponse> {
-  const response = await fetch(`${API_BASE}/sample/diffusion`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
-  if (!response.ok) throw new Error('Diffusion sampling failed');
-  return response.json();
+  const response = await fetchWithTimeout(
+    `${API_BASE}/sample/diffusion`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    },
+    SAMPLING_TIMEOUT
+  );
+  return handleResponse<SampleResponse>(response);
 }
 
 export async function getRandomConfiguration(
@@ -93,10 +155,14 @@ export async function getRandomConfiguration(
   energy: number;
   magnetization: number;
 }> {
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${API_BASE}/sample/random?lattice_size=${latticeSize}`
   );
-  return response.json();
+  return handleResponse<{
+    spins: number[][];
+    energy: number;
+    magnetization: number;
+  }>(response);
 }
 
 export async function compareSamplers(params: {
@@ -104,13 +170,16 @@ export async function compareSamplers(params: {
   lattice_size: number;
   n_samples: number;
 }): Promise<AnalysisResponse> {
-  const response = await fetch(`${API_BASE}/analysis/compare`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
-  if (!response.ok) throw new Error('Comparison failed');
-  return response.json();
+  const response = await fetchWithTimeout(
+    `${API_BASE}/analysis/compare`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    },
+    SAMPLING_TIMEOUT
+  );
+  return handleResponse<AnalysisResponse>(response);
 }
 
 export async function getPhaseDiagram(params: {
@@ -124,10 +193,12 @@ export async function getPhaseDiagram(params: {
   if (params.n_samples_per_temp)
     queryParams.set('n_samples_per_temp', params.n_samples_per_temp.toString());
 
-  const response = await fetch(
-    `${API_BASE}/analysis/phase_diagram?${queryParams}`
+  const response = await fetchWithTimeout(
+    `${API_BASE}/analysis/phase_diagram?${queryParams}`,
+    {},
+    SAMPLING_TIMEOUT
   );
-  return response.json();
+  return handleResponse<PhaseDiagramResponse>(response);
 }
 
 export function createSamplingWebSocket(
@@ -135,21 +206,47 @@ export function createSamplingWebSocket(
   onDone: () => void,
   onError: (error: string) => void
 ): WebSocket {
-  const ws = new WebSocket('ws://localhost:8000/ws/sample');
+  const ws = new WebSocket(`${WS_BASE}/ws/sample`);
 
   ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    if (data.type === 'frame') {
-      onFrame(data);
-    } else if (data.type === 'done') {
-      onDone();
-    } else if (data.type === 'error') {
-      onError(data.message);
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === 'frame') {
+        onFrame(data);
+      } else if (data.type === 'done') {
+        onDone();
+      } else if (data.type === 'error') {
+        const wsError = new WebSocketError(
+          data.message || 'WebSocket error',
+          ErrorCode.WS_MESSAGE_ERROR
+        );
+        onError(wsError.getUserMessage());
+      }
+    } catch {
+      const parseError = new WebSocketError(
+        'Failed to parse WebSocket message',
+        ErrorCode.WS_MESSAGE_ERROR
+      );
+      onError(parseError.getUserMessage());
     }
   };
 
   ws.onerror = () => {
-    onError('WebSocket connection error');
+    const connError = new WebSocketError(
+      'WebSocket connection failed',
+      ErrorCode.WS_CONNECTION_ERROR
+    );
+    onError(connError.getUserMessage());
+  };
+
+  ws.onclose = (event) => {
+    if (!event.wasClean) {
+      const closeError = new WebSocketError(
+        `Connection closed unexpectedly (code: ${event.code})`,
+        ErrorCode.WS_CLOSED
+      );
+      onError(closeError.getUserMessage());
+    }
   };
 
   return ws;

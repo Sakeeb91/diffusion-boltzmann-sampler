@@ -17,4 +17,5 @@ export type {
   SampleResponse,
   AnalysisResponse,
   PhaseDiagramResponse,
+  HealthResponse,
 } from './api';
