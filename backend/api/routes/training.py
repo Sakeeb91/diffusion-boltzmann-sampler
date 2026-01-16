@@ -213,6 +213,7 @@ async def stop_training() -> Dict[str, str]:
 @router.get("/config")
 async def get_training_config() -> Dict[str, Any]:
     """Get recommended training configuration."""
+    checkpoint_dir = get_checkpoint_dir()
     return {
         "recommended": {
             "temperature": IsingModel.T_CRITICAL,
@@ -221,11 +222,16 @@ async def get_training_config() -> Dict[str, Any]:
             "epochs": 100,
             "batch_size": 16,
             "learning_rate": 1e-3,
+            "checkpoint_interval": 0,
         },
         "limits": {
             "max_lattice_size": 64,
             "max_epochs": 500,
             "max_samples": 5000,
+        },
+        "checkpointing": {
+            "directory": str(checkpoint_dir),
+            "interval_note": "0 disables periodic checkpoints",
         },
         "notes": {
             "temperature": f"Critical temperature is ~{IsingModel.T_CRITICAL:.3f}",
