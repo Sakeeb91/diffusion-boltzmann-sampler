@@ -1,9 +1,17 @@
 import React, { useEffect, useRef } from 'react';
 import { useSimulationStore } from '../store/simulationStore';
+import { useFrameDelay } from '../store/selectors';
 
 interface DiffusionAnimationProps {
   onFrameChange?: (frame: number) => void;
 }
+
+const SPEED_OPTIONS = [
+  { value: 0.5, label: '0.5x' },
+  { value: 1, label: '1x' },
+  { value: 2, label: '2x' },
+  { value: 4, label: '4x' },
+];
 
 export const DiffusionAnimation: React.FC<DiffusionAnimationProps> = ({
   onFrameChange,
@@ -12,9 +20,13 @@ export const DiffusionAnimation: React.FC<DiffusionAnimationProps> = ({
     animationFrames,
     currentFrame,
     isPlaying,
+    playbackSpeed,
     setCurrentFrame,
     setIsPlaying,
+    setPlaybackSpeed,
   } = useSimulationStore();
+
+  const frameDelay = useFrameDelay();
 
   const animationRef = useRef<number>();
 
@@ -26,7 +38,7 @@ export const DiffusionAnimation: React.FC<DiffusionAnimationProps> = ({
           const nextFrame = currentFrame + 1;
           setCurrentFrame(nextFrame);
           onFrameChange?.(nextFrame);
-        }, 50); // 20fps
+        }, frameDelay);
       } else {
         setIsPlaying(false);
       }
@@ -37,7 +49,7 @@ export const DiffusionAnimation: React.FC<DiffusionAnimationProps> = ({
         clearTimeout(animationRef.current);
       }
     };
-  }, [isPlaying, currentFrame, animationFrames.length, setCurrentFrame, setIsPlaying, onFrameChange]);
+  }, [isPlaying, currentFrame, animationFrames.length, frameDelay, setCurrentFrame, setIsPlaying, onFrameChange]);
 
   if (animationFrames.length === 0) {
     return (
@@ -160,6 +172,26 @@ export const DiffusionAnimation: React.FC<DiffusionAnimationProps> = ({
             <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
           </svg>
         </button>
+      </div>
+
+      {/* Playback Speed */}
+      <div className="flex items-center justify-center gap-2 pt-2 border-t border-slate-700">
+        <span className="text-xs text-slate-500">Speed:</span>
+        <div className="flex gap-1">
+          {SPEED_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setPlaybackSpeed(option.value)}
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                playbackSpeed === option.value
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-slate-200'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
