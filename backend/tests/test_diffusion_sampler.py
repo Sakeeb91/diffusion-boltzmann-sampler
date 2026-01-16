@@ -405,6 +405,65 @@ class TestDiffusionSamplerGenerateBatch:
             assert samples.shape == (2, 8, 8)
 
 
+class TestDiffusionSamplerCheckpoint:
+    """Tests for checkpoint save/load functionality."""
+
+    @pytest.fixture
+    def diffusion_sampler(self):
+        """Create a diffusion sampler for testing."""
+        model = ScoreNetwork(in_channels=1, base_channels=16, time_embed_dim=32, num_blocks=2)
+        return DiffusionSampler(
+            score_network=model,
+            num_steps=10,
+        )
+
+    def test_save_checkpoint(self, diffusion_sampler, tmp_path):
+        """save_checkpoint should create a valid checkpoint file."""
+        checkpoint_path = tmp_path / "test_checkpoint.pt"
+        diffusion_sampler.save_checkpoint(str(checkpoint_path))
+        assert checkpoint_path.exists()
+
+    def test_save_checkpoint_contains_required_keys(self, diffusion_sampler, tmp_path):
+        """Checkpoint should contain model state dict and config."""
+        checkpoint_path = tmp_path / "test_checkpoint.pt"
+        diffusion_sampler.save_checkpoint(str(checkpoint_path))
+
+        checkpoint = torch.load(checkpoint_path, weights_only=False)
+        assert "model_state_dict" in checkpoint
+        assert "num_steps" in checkpoint
+        assert "diffusion_config" in checkpoint
+
+    def test_save_checkpoint_with_model_config(self, diffusion_sampler, tmp_path):
+        """Checkpoint should save model config when provided."""
+        checkpoint_path = tmp_path / "test_checkpoint.pt"
+        config = {"in_channels": 1, "base_channels": 16}
+        diffusion_sampler.save_checkpoint(str(checkpoint_path), model_config=config)
+
+        checkpoint = torch.load(checkpoint_path, weights_only=False)
+        assert "model_config" in checkpoint
+        assert checkpoint["model_config"] == config
+
+    def test_load_from_checkpoint(self, diffusion_sampler, tmp_path):
+        """from_checkpoint should create a working sampler."""
+        checkpoint_path = tmp_path / "test_checkpoint.pt"
+        config = {"in_channels": 1, "base_channels": 16, "time_embed_dim": 32, "num_blocks": 2}
+        diffusion_sampler.save_checkpoint(str(checkpoint_path), model_config=config)
+
+        loaded_sampler = DiffusionSampler.from_checkpoint(str(checkpoint_path), num_steps=10)
+        assert loaded_sampler is not None
+        assert loaded_sampler.num_steps == 10
+
+    def test_load_checkpoint_samples_match_shape(self, diffusion_sampler, tmp_path):
+        """Loaded sampler should produce correct output shapes."""
+        checkpoint_path = tmp_path / "test_checkpoint.pt"
+        config = {"in_channels": 1, "base_channels": 16, "time_embed_dim": 32, "num_blocks": 2}
+        diffusion_sampler.save_checkpoint(str(checkpoint_path), model_config=config)
+
+        loaded_sampler = DiffusionSampler.from_checkpoint(str(checkpoint_path), num_steps=10)
+        samples = loaded_sampler.sample(shape=(2, 1, 8, 8))
+        assert samples.shape == (2, 1, 8, 8)
+
+
 class TestPretrainedDiffusionSampler:
     """Tests for PretrainedDiffusionSampler (heuristic mode)."""
 
