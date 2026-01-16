@@ -402,6 +402,26 @@ class TestTrainingAPI:
         )
         assert response.status_code == 404
 
+    def test_latest_checkpoint_endpoint(self, client, monkeypatch, tmp_path):
+        """GET /training/checkpoints/latest returns newest checkpoint."""
+        monkeypatch.setenv("CHECKPOINT_DIR", str(tmp_path))
+
+        from backend.ml.checkpoints import format_checkpoint_name
+
+        checkpoint_path = tmp_path / format_checkpoint_name(8, 2.0)
+        torch.save(
+            {
+                "lattice_size": 8,
+                "training_temperature": 2.0,
+            },
+            checkpoint_path,
+        )
+
+        response = client.get("/training/checkpoints/latest?lattice_size=8&temperature=2.0")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == checkpoint_path.name
+
 
 # ============================================================================
 # Helper Class Tests
