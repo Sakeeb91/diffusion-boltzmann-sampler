@@ -152,6 +152,8 @@ async def _stream_mcmc_samples(
             "step": step,
             "total_steps": num_steps,
             "progress": (step + 1) / num_steps,
+            "sampler": "mcmc",
+            "temperature": temperature,
         }
         if not await manager.send_json(websocket, frame_data):
             break  # Connection lost
@@ -187,15 +189,22 @@ async def _stream_diffusion_samples(
         sampler.sample_with_trajectory(shape, yield_every=yield_every)
     ):
         spins = torch.sign(x[0, 0])  # Discretize
+
+        # Compute noise level (sigma) from diffusion time
+        # For VP-SDE, sigma is approximately sqrt(t) at high t values
+        sigma = t ** 0.5 if t > 0 else 0.0
+
         frame_data: Dict[str, Any] = {
             "type": "frame",
             "spins": spins.tolist(),
             "t": t,
+            "sigma": sigma,  # Noise level for visualization
             "energy": ising.energy_per_spin(spins).item(),
             "magnetization": ising.magnetization(spins).item(),
             "step": step,
             "total_steps": num_steps // yield_every + 1,
             "progress": 1.0 - t,
+            "sampler": "diffusion",
         }
         if not await manager.send_json(websocket, frame_data):
             break  # Connection lost
