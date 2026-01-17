@@ -9,7 +9,23 @@ export const DEFAULT_CONFIG = {
   samplerType: 'mcmc' as SamplerType,
   numSteps: 100,
   playbackSpeed: 1.0,
+  maxFrames: 500, // Maximum frames to prevent memory issues
 } as const;
+
+/** Metadata for a single animation frame */
+export interface FrameMetadata {
+  step: number;
+  progress: number;
+  energy: number;
+  magnetization: number;
+  sampler?: SamplerType;
+  /** Diffusion time (1.0 -> 0.0) */
+  t?: number;
+  /** Noise level (sigma) for diffusion */
+  sigma?: number;
+  /** Physical temperature for MCMC */
+  temperature?: number;
+}
 
 interface SimulationState {
   // Configuration
@@ -27,6 +43,7 @@ interface SimulationState {
   // Animation
   isRunning: boolean;
   animationFrames: number[][][];
+  frameMetadata: FrameMetadata[];
   currentFrame: number;
   isPlaying: boolean;
 
@@ -44,7 +61,7 @@ interface SimulationState {
   setEnergy: (energy: number) => void;
   setMagnetization: (mag: number) => void;
   setIsRunning: (running: boolean) => void;
-  addAnimationFrame: (frame: number[][]) => void;
+  addAnimationFrame: (frame: number[][], metadata?: Partial<FrameMetadata>) => void;
   clearAnimationFrames: () => void;
   setCurrentFrame: (frame: number) => void;
   setIsPlaying: (playing: boolean) => void;
@@ -53,6 +70,7 @@ interface SimulationState {
   reset: () => void;
   resetConfig: () => void;
   clearState: () => void;
+  getCurrentFrameMetadata: () => FrameMetadata | null;
 }
 
 /** Initial state values */
@@ -72,6 +90,7 @@ const initialState = {
   // Animation
   isRunning: false,
   animationFrames: [] as number[][][],
+  frameMetadata: [] as FrameMetadata[],
   currentFrame: 0,
   isPlaying: false,
 
@@ -80,7 +99,7 @@ const initialState = {
   error: null as string | null,
 };
 
-export const useSimulationStore = create<SimulationState>((set) => ({
+export const useSimulationStore = create<SimulationState>((set, get) => ({
   ...initialState,
 
   // Actions
@@ -93,13 +112,36 @@ export const useSimulationStore = create<SimulationState>((set) => ({
   setEnergy: (energy) => set({ energy }),
   setMagnetization: (magnetization) => set({ magnetization }),
   setIsRunning: (isRunning) => set({ isRunning }),
-  addAnimationFrame: (frame) =>
-    set((state) => ({
-      animationFrames: [...state.animationFrames, frame],
-      spins: frame,
-    })),
+  addAnimationFrame: (frame, metadata) =>
+    set((state) => {
+      // Limit frames to prevent memory issues
+      const maxFrames = DEFAULT_CONFIG.maxFrames;
+      let newFrames = [...state.animationFrames, frame];
+      let newMetadata = [
+        ...state.frameMetadata,
+        {
+          step: state.animationFrames.length,
+          progress: 0,
+          energy: state.energy ?? 0,
+          magnetization: state.magnetization ?? 0,
+          ...metadata,
+        },
+      ];
+
+      // Trim if exceeding limit
+      if (newFrames.length > maxFrames) {
+        newFrames = newFrames.slice(-maxFrames);
+        newMetadata = newMetadata.slice(-maxFrames);
+      }
+
+      return {
+        animationFrames: newFrames,
+        frameMetadata: newMetadata,
+        spins: frame,
+      };
+    }),
   clearAnimationFrames: () =>
-    set({ animationFrames: [], currentFrame: 0, isPlaying: false }),
+    set({ animationFrames: [], frameMetadata: [], currentFrame: 0, isPlaying: false }),
   setCurrentFrame: (currentFrame) =>
     set((state) => ({
       currentFrame,
@@ -125,11 +167,16 @@ export const useSimulationStore = create<SimulationState>((set) => ({
       energy: null,
       magnetization: null,
       animationFrames: [],
+      frameMetadata: [],
       currentFrame: 0,
       isPlaying: false,
       isRunning: false,
       error: null,
     }),
+  getCurrentFrameMetadata: () => {
+    const state = get();
+    return state.frameMetadata[state.currentFrame] || null;
+  },
 }));
 
 // Critical temperature constant
