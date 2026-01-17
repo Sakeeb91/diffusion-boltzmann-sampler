@@ -2,7 +2,7 @@
  * WebSocket hook for real-time sampling communication.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { env } from '../config/env';
 
 const WS_BASE = env.wsBaseUrl;
@@ -222,6 +222,17 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     setReconnectAttempt(0);
     updateState('disconnected');
   }, [updateState, clearReconnectTimeout]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      clearReconnectTimeout();
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [clearReconnectTimeout]);
 
   return {
     state,
