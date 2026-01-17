@@ -287,4 +287,99 @@ describe('DiffusionAnimation', () => {
       expect(useSimulationStore.getState().isPlaying).toBe(false);
     });
   });
+
+  describe('noise level indicator', () => {
+    const diffusionMetadata = {
+      step: 0,
+      progress: 0.5,
+      energy: -0.5,
+      magnetization: 0.1,
+      sampler: 'diffusion' as const,
+      t: 0.5,
+      sigma: 0.707,
+    };
+
+    const mcmcMetadata = {
+      step: 0,
+      progress: 0.5,
+      energy: -0.5,
+      magnetization: 0.1,
+      sampler: 'mcmc' as const,
+      temperature: 2.27,
+    };
+
+    it('should show noise level indicator for diffusion sampler', () => {
+      useSimulationStore.getState().addAnimationFrame(mockFrames[0], diffusionMetadata);
+      useSimulationStore.getState().setCurrentFrame(0);
+
+      render(<DiffusionAnimation />);
+
+      expect(screen.getByText('Noise Level')).toBeInTheDocument();
+    });
+
+    it('should display sigma value for diffusion', () => {
+      useSimulationStore.getState().addAnimationFrame(mockFrames[0], diffusionMetadata);
+      useSimulationStore.getState().setCurrentFrame(0);
+
+      render(<DiffusionAnimation />);
+
+      expect(screen.getByText(/sigma = 0.707/)).toBeInTheDocument();
+    });
+
+    it('should display diffusion time t', () => {
+      useSimulationStore.getState().addAnimationFrame(mockFrames[0], diffusionMetadata);
+      useSimulationStore.getState().setCurrentFrame(0);
+
+      render(<DiffusionAnimation />);
+
+      expect(screen.getByText(/t = 0.50/)).toBeInTheDocument();
+    });
+
+    it('should show "Denoising" phase for mid-range t', () => {
+      useSimulationStore.getState().addAnimationFrame(mockFrames[0], diffusionMetadata);
+      useSimulationStore.getState().setCurrentFrame(0);
+
+      render(<DiffusionAnimation />);
+
+      expect(screen.getByText('Denoising')).toBeInTheDocument();
+    });
+
+    it('should show "Pure noise" phase for high t', () => {
+      const highTMetadata = { ...diffusionMetadata, t: 0.8 };
+      useSimulationStore.getState().addAnimationFrame(mockFrames[0], highTMetadata);
+      useSimulationStore.getState().setCurrentFrame(0);
+
+      render(<DiffusionAnimation />);
+
+      expect(screen.getByText('Pure noise')).toBeInTheDocument();
+    });
+
+    it('should show "Crystallizing" phase for low t', () => {
+      const lowTMetadata = { ...diffusionMetadata, t: 0.2 };
+      useSimulationStore.getState().addAnimationFrame(mockFrames[0], lowTMetadata);
+      useSimulationStore.getState().setCurrentFrame(0);
+
+      render(<DiffusionAnimation />);
+
+      expect(screen.getByText('Crystallizing')).toBeInTheDocument();
+    });
+
+    it('should not show noise level indicator for MCMC sampler', () => {
+      useSimulationStore.getState().addAnimationFrame(mockFrames[0], mcmcMetadata);
+      useSimulationStore.getState().setCurrentFrame(0);
+
+      render(<DiffusionAnimation />);
+
+      expect(screen.queryByText('Noise Level')).not.toBeInTheDocument();
+    });
+
+    it('should not show noise level indicator when no metadata', () => {
+      useSimulationStore.getState().addAnimationFrame(mockFrames[0]);
+      useSimulationStore.getState().setCurrentFrame(0);
+
+      render(<DiffusionAnimation />);
+
+      expect(screen.queryByText('Noise Level')).not.toBeInTheDocument();
+    });
+  });
 });
