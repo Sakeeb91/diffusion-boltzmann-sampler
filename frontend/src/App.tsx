@@ -10,7 +10,9 @@ import {
 import { IsingVisualizer } from './components/IsingVisualizer';
 import { ControlPanel } from './components/ControlPanel';
 import { DiffusionAnimation } from './components/DiffusionAnimation';
+import { DiffusionProgressVisualization } from './components/DiffusionProgressVisualization';
 import { CorrelationPlot, DistributionPlot } from './components/CorrelationPlot';
+import type { FrameMetadata } from './store/simulationStore';
 
 function App() {
   const {
@@ -27,7 +29,12 @@ function App() {
     clearAnimationFrames,
     setIsConnected,
     setError,
+    frameMetadata,
+    currentFrame,
   } = useSimulationStore();
+
+  // Get current frame metadata for diffusion progress visualization
+  const currentMetadata = frameMetadata[currentFrame] || null;
 
   const [analysisData, setAnalysisData] = useState<AnalysisResponse | null>(null);
   const [isComparing, setIsComparing] = useState(false);
@@ -60,7 +67,18 @@ function App() {
     const ws = createSamplingWebSocket(
       // onFrame
       (data) => {
-        addAnimationFrame(data.spins);
+        // Build frame metadata from WebSocket data
+        const metadata: Partial<FrameMetadata> = {
+          step: data.step,
+          progress: data.progress,
+          energy: data.energy,
+          magnetization: data.magnetization,
+          sampler: data.sampler,
+          t: data.t,
+          sigma: data.sigma,
+          temperature: data.temperature,
+        };
+        addAnimationFrame(data.spins, metadata);
         setEnergy(data.energy);
         setMagnetization(data.magnetization);
       },
@@ -200,6 +218,11 @@ function App() {
             <div className="lg:col-span-1 space-y-6">
               <ControlPanel onSample={handleSample} onRandomize={handleRandomize} />
               <DiffusionAnimation />
+              {samplerType === 'diffusion' && currentMetadata?.sampler === 'diffusion' && (
+                <div className="bg-slate-800 rounded-lg p-4 shadow-lg">
+                  <DiffusionProgressVisualization metadata={currentMetadata} />
+                </div>
+              )}
             </div>
 
             {/* Right Column - Visualization */}
