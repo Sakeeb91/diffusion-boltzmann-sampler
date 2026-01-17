@@ -8,7 +8,7 @@ export {
   DEFAULT_CONFIG,
 } from './simulationStore';
 
-export type { SamplerType } from './simulationStore';
+export type { SamplerType, FrameMetadata } from './simulationStore';
 
 // Selector hooks
 export {
