@@ -192,6 +192,8 @@ async def sample_diffusion(request: DiffusionSampleRequest) -> SampleResponse:
             lattice_size=request.lattice_size,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

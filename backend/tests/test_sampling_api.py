@@ -430,7 +430,7 @@ class TestDiffusionCheckpointSampling:
         sampler = DiffusionSampler(
             score_network=model,
             diffusion=DiffusionProcess(beta_min=0.1, beta_max=1.0),
-            num_steps=5,
+            num_steps=10,
         )
 
         checkpoint_path = tmp_path / format_checkpoint_name(8, 2.27)
@@ -447,7 +447,7 @@ class TestDiffusionCheckpointSampling:
                 "temperature": 2.27,
                 "lattice_size": 8,
                 "n_samples": 1,
-                "num_steps": 5,
+                "num_steps": 10,
                 "checkpoint_name": checkpoint_path.name,
                 "discretize": True,
                 "discretization_method": "sign",
@@ -476,7 +476,7 @@ class TestDiffusionCheckpointSampling:
         sampler = DiffusionSampler(
             score_network=ScoreNetwork(**model_config),
             diffusion=DiffusionProcess(beta_min=0.1, beta_max=1.0),
-            num_steps=5,
+            num_steps=10,
         )
 
         checkpoint_path = tmp_path / format_checkpoint_name(8, 2.27)
@@ -493,7 +493,7 @@ class TestDiffusionCheckpointSampling:
                 "temperature": 2.27,
                 "lattice_size": 8,
                 "n_samples": 1,
-                "num_steps": 5,
+                "num_steps": 10,
                 "use_trained_model": True,
                 "discretize": True,
                 "discretization_method": "sign",
@@ -513,7 +513,7 @@ class TestDiffusionCheckpointSampling:
                 "temperature": 2.27,
                 "lattice_size": 8,
                 "n_samples": 1,
-                "num_steps": 5,
+                "num_steps": 10,
                 "checkpoint_name": "missing.pt",
                 "use_trained_model": False,
             },
