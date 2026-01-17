@@ -1,18 +1,16 @@
 """FastAPI application for Diffusion Boltzmann Sampler."""
 
-import asyncio
 from contextlib import asynccontextmanager
 from typing import Dict, Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-import torch
 
 from .routes import sampling_router, training_router, analysis_router
+from .websocket import sample_websocket_handler
 from ..ml.systems.ising import IsingModel
 from ..ml.models.score_network import ScoreNetwork
 from ..ml.models.diffusion import DiffusionProcess
-from ..ml.samplers.mcmc import MetropolisHastings
 
 
 # Global state for ML models
@@ -114,58 +112,7 @@ async def websocket_sample(websocket: WebSocket):
     - sampler: "mcmc" or "diffusion"
     - num_steps: int
     """
-    await websocket.accept()
-
-    try:
-        # Receive parameters
-        params = await websocket.receive_json()
-        temperature = params.get("temperature", 2.27)
-        lattice_size = params.get("lattice_size", 32)
-        sampler_type = params.get("sampler", "mcmc")
-        num_steps = params.get("num_steps", 100)
-
-        # Create model for this request
-        ising = IsingModel(size=lattice_size)
-
-        if sampler_type == "mcmc":
-            # MCMC sampling with trajectory
-            sampler = MetropolisHastings(ising, temperature)
-            for spins in sampler.sample_with_trajectory(n_steps=num_steps):
-                await websocket.send_json({
-                    "type": "frame",
-                    "spins": spins.tolist(),
-                    "energy": ising.energy_per_spin(spins).item(),
-                    "magnetization": ising.magnetization(spins).item(),
-                })
-                await asyncio.sleep(0.01)  # Small delay for animation
-        else:
-            # Diffusion sampling with trajectory
-            from ..ml.samplers.diffusion import PretrainedDiffusionSampler
-
-            sampler = PretrainedDiffusionSampler(
-                lattice_size=lattice_size,
-                num_steps=num_steps,
-            )
-
-            # Use heuristic sampling for demo
-            shape = (1, 1, lattice_size, lattice_size)
-            for x, t in sampler.sample_with_trajectory(shape, yield_every=max(1, num_steps // 50)):
-                spins = torch.sign(x[0, 0])  # Discretize
-                await websocket.send_json({
-                    "type": "frame",
-                    "spins": spins.tolist(),
-                    "t": t,
-                    "energy": ising.energy_per_spin(spins).item(),
-                    "magnetization": ising.magnetization(spins).item(),
-                })
-                await asyncio.sleep(0.02)
-
-        await websocket.send_json({"type": "done"})
-
-    except WebSocketDisconnect:
-        print("WebSocket disconnected")
-    except Exception as e:
-        await websocket.send_json({"type": "error", "message": str(e)})
+    await sample_websocket_handler(websocket, state)
 
 
 def get_state() -> AppState:

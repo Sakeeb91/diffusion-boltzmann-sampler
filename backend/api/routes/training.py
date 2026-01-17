@@ -243,13 +243,17 @@ async def get_training_config() -> Dict[str, Any]:
 class CheckpointInfo(BaseModel):
     """Information about a saved checkpoint."""
 
+    model_config = {"populate_by_name": True}
+
     name: str
     path: str
     size_bytes: int
     modified_time: str
     lattice_size: Optional[int] = None
     training_temperature: Optional[float] = None
-    model_config: Optional[Dict[str, Any]] = None
+    network_config: Optional[Dict[str, Any]] = Field(
+        default=None, alias="model_config"
+    )
     diffusion_config: Optional[Dict[str, Any]] = None
     training_meta: Optional[Dict[str, Any]] = None
 
