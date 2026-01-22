@@ -3,6 +3,7 @@
  */
 
 export { IsingVisualizer } from './IsingVisualizer';
+export { LJVisualizer } from './LJVisualizer';
 export { ControlPanel } from './ControlPanel';
 export { DiffusionAnimation } from './DiffusionAnimation';
 export { DiffusionProgressVisualization } from './DiffusionProgressVisualization';
