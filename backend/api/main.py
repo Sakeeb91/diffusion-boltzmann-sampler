@@ -7,6 +7,7 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
 from .routes import sampling_router, training_router, analysis_router
+from .routes.lj_sampling import router as lj_router
 from .websocket import sample_websocket_handler
 from ..ml.systems.ising import IsingModel
 from ..ml.models.score_network import ScoreNetwork
@@ -69,6 +70,7 @@ app.add_middleware(
 app.include_router(sampling_router, prefix="/sample", tags=["Sampling"])
 app.include_router(training_router, prefix="/training", tags=["Training"])
 app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
+app.include_router(lj_router, prefix="/sample", tags=["Lennard-Jones"])
 
 
 @app.get("/health")
@@ -86,6 +88,7 @@ async def health_check() -> Dict[str, Any]:
             "mcmc_sampling": True,
             "diffusion_sampling": True,
             "websocket_streaming": True,
+            "lennard_jones": True,
         },
     }
 
