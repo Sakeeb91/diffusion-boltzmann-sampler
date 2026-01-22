@@ -161,7 +161,7 @@ def rdf_statistics(
         # Integrate up to first minimum (in 2D)
         r_integrate = r_valid[: first_min_idx + 1]
         g_integrate = g_valid[: first_min_idx + 1]
-        coordination_number = 2 * np.pi * np.trapz(r_integrate * g_integrate, r_integrate)
+        coordination_number = 2 * np.pi * np.trapezoid(r_integrate * g_integrate, r_integrate)
     else:
         coordination_number = 0.0
 
@@ -191,7 +191,8 @@ def compare_rdfs(
         - peak_diff: Difference in first peak positions
     """
     # Interpolate to common grid if needed
-    if not np.allclose(r1, r2):
+    same_grid = len(r1) == len(r2) and np.allclose(r1, r2)
+    if not same_grid:
         r_common = np.linspace(
             max(r1.min(), r2.min()),
             min(r1.max(), r2.max()),
