@@ -14,6 +14,12 @@ from .correlation import (
     correlation_function_comparison,
     comprehensive_comparison,
 )
+from .rdf import (
+    compute_rdf,
+    compute_rdf_from_system,
+    rdf_statistics,
+    compare_rdfs,
+)
 
 __all__ = [
     "pair_correlation",
@@ -30,4 +36,8 @@ __all__ = [
     "energy_wasserstein",
     "correlation_function_comparison",
     "comprehensive_comparison",
+    "compute_rdf",
+    "compute_rdf_from_system",
+    "rdf_statistics",
+    "compare_rdfs",
 ]
