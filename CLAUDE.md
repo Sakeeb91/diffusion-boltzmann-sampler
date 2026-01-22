@@ -69,10 +69,12 @@ Frontend (React/TypeScript)  →  Backend (FastAPI)  →  ML Engine (PyTorch)
 - **api/websocket.py**: WebSocket handlers with ConnectionManager for streaming samples
   - Streams frame data with noise level (sigma), diffusion time (t), and metadata
   - Supports both MCMC and diffusion samplers
-- **api/routes/**: Endpoints split by domain (sampling.py, training.py, analysis.py)
+- **api/routes/**: Endpoints split by domain (sampling.py, training.py, analysis.py, lj_sampling.py)
 - **ml/systems/ising.py**: 2D Ising model with energy, magnetization, score functions
+- **ml/systems/lennard_jones.py**: 2D Lennard-Jones fluid with periodic boundaries
 - **ml/models/**: Score network (U-Net), diffusion process, noise schedules
-- **ml/samplers/**: MCMC (Metropolis-Hastings) and diffusion samplers
+- **ml/samplers/**: MCMC (Metropolis-Hastings), diffusion, and Langevin dynamics samplers
+- **ml/models/score_network_continuous.py**: MLP score network for continuous particle systems
 - **ml/training/**: Score matching loss and trainer
 - **ml/analysis/**: Correlation functions, distribution comparisons, statistics
 
@@ -83,7 +85,7 @@ Frontend (React/TypeScript)  →  Backend (FastAPI)  →  ML Engine (PyTorch)
 - **Discretization**: Convert continuous diffusion output to discrete spins {-1, +1}
 
 ### Frontend Structure (frontend/src/)
-- **components/**: IsingVisualizer (heatmap), DiffusionAnimation, CorrelationPlot, ControlPanel
+- **components/**: IsingVisualizer (heatmap), LJVisualizer (particles), DiffusionAnimation, CorrelationPlot, ControlPanel
   - **DiffusionProgressVisualization**: Visual timeline showing denoising trajectory phases
   - **MCMCvsDiffusionComparison**: Side-by-side comparison of sampling methods
   - **ComparisonPanel**: Reusable panel with SVG spin grid renderer
@@ -121,9 +123,18 @@ client = TestClient(app)
 Test score network output shapes match input shapes. Test diffusion sampler produces valid trajectories.
 
 ## Physical Constants
+
+### Ising Model
 - **Critical temperature**: `T_c ≈ 2.269` (2D Ising model phase transition)
 - **Default lattice size**: 32×32
 - **Default diffusion steps**: 100
+
+### Lennard-Jones System
+- **Critical temperature**: `T* ≈ 1.326` (reduced units)
+- **Triple point temperature**: `T* ≈ 0.694`
+- **Liquid density**: `ρ* ≈ 0.8` (reduced units)
+- **Default cutoff**: 2.5σ (shifted potential)
+- **API endpoints**: `/sample/lj/sample`, `/sample/lj/rdf`, `/sample/lj/lattice`
 
 ## Type Aliases (backend/ml/types.py)
 Custom type aliases for clarity: `SpinConfiguration`, `EnergyTensor`, `ScoreTensor`, `Temperature`, `DiffusionTime`
